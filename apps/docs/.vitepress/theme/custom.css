@@ -1,0 +1,111 @@
+:root {
+  --vp-c-brand-1: #4f46e5;
+  --vp-c-brand-2: #4338ca;
+  --vp-c-brand-3: #3730a3;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #4f46e5 0%, #818cf8 100%);
+}
+
+.dark {
+  --vp-c-brand-1: #818cf8;
+  --vp-c-brand-2: #6366f1;
+  --vp-c-brand-3: #4f46e5;
+}
+
+/* Solid nav background so the hero SVG doesn't bleed through it */
+.VPNavBar:not(.has-sidebar):not(.home.top) {
+  background-color: var(--vp-c-bg) !important;
+}
+
+.VPNavBar.home.top {
+  background-color: var(--vp-c-bg) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Breathing room between sticky nav and hero */
+.VPHome .VPHero {
+  padding-top: 64px !important;
+}
+
+.VPHome {
+  margin-bottom: 0 !important;
+}
+@media (min-width: 768px) {
+  .VPHome .VPHero {
+    padding: 140px 0 160px !important;
+  }
+}
+
+/* Hero image: always scale within its container */
+.VPHero .VPImage {
+  max-width: 100% !important;
+  height: auto !important;
+  width: 100% !important;
+}
+
+/* VitePress default theme nudges .image-container up-and-left at >=960px;
+   our SVG is taller and looks better centered. */
+/* .VPHero .image-container {
+  transform: none !important;
+} */
+@media (min-width: 960px) {
+  .VPHero .VPImage {
+    margin-top: 60px !important;
+    max-width: 600px !important;
+    max-height: 480px !important;
+    width: auto !important;
+  }
+
+  .VPHero .name {
+    font-size: 1.2rem !important;
+    line-height: 2 !important;
+  }
+
+  .VPHero .text {
+    font-size: 2rem !important;
+    line-height: 1.3 !important;
+  }
+
+  .VPHero .tagline {
+    font-size: 1rem !important;
+    line-height: 1.6 !important;
+    max-width: 460px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .VPDoc.has-aside .content-container {
+    max-width: 768px !important;
+  }
+}
+
+/* Feature cards: stack to 1 column on small screens */
+@media (max-width: 640px) {
+  .VPFeatures .items {
+    flex-direction: column !important;
+  }
+  .VPFeatures .item {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Code blocks: horizontal scroll, never overflow */
+div[class*="language-"] {
+  overflow-x: auto !important;
+}
+
+div[class*="language-"] pre {
+  overflow-x: auto !important;
+  white-space: pre !important;
+}
+
+div[class*="language-"] > button.copy {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+div[class*="language-"] > button.copy:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

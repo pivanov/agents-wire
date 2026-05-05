@@ -1,0 +1,17 @@
+{"type":"text-delta","text":"Let me check the files.","messageId":"msg-1"}
+{"type":"tool-call","toolCallId":"call-1","tool":"bash","kind":null,"status":"running","input":{"command":"ls -la"},"locations":null}
+{"type":"tool-call-update","toolCallId":"call-1","title":"bash","status":"completed","input":{"command":"ls -la"},"output":"file1.ts\nfile2.ts\nREADME.md","locations":null}
+{"type":"text-delta","text":"Found 3 files.","messageId":"msg-1"}
+{"type":"usage","usage":{"contextSize":2048,"contextUsed":512,"costUsd":0.002}}
+{"type":"finish","stopReason":"end_turn","usage":{"contextSize":2048,"contextUsed":512,"costUsd":0.002},"cost":null}
+{"type":"text-delta","text":"Now let me read the README.","messageId":"msg-2"}
+{"type":"tool-call","toolCallId":"call-2","tool":"read_file","kind":null,"status":"running","input":{"path":"README.md"},"locations":null}
+{"type":"tool-call-update","toolCallId":"call-2","title":"read_file","status":"completed","input":{"path":"README.md"},"output":"# Project\n\nThis is the README.","locations":null}
+{"type":"text-delta","text":"The README contains project info.","messageId":"msg-2"}
+{"type":"plan","entries":[{"title":"Read README","status":"completed"},{"title":"Summarize content","status":"pending"}]}
+{"type":"text-delta","text":" Task complete.","messageId":"msg-2"}
+{"type":"usage","usage":{"contextSize":4096,"contextUsed":1024,"costUsd":0.005}}
+{"type":"finish","stopReason":"end_turn","usage":{"contextSize":4096,"contextUsed":1024,"costUsd":0.005},"cost":null}
+{"type":"text-delta","text":"I've completed the analysis.","messageId":"msg-3"}
+{"type":"thinking-delta","text":"User seems satisfied.","messageId":"msg-3"}
+{"type":"finish","stopReason":"max_tokens","usage":null,"cost":null}

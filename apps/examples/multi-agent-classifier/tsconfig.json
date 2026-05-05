@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["bun"],
+    "paths": {
+      "@pivanov/agents-wire": ["../../../packages/agents-wire/src/index.ts"],
+      "@pivanov/agents-wire/orchestrate": ["../../../packages/agents-wire/src/orchestrate/index.ts"],
+      "@pivanov/agents-wire/errors": ["../../../packages/agents-wire/src/errors.ts"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

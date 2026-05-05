@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+*.tgz
+.turbo
+coverage
+.env
+.env.local
+bun.lock.bak
+apps/docs/reference/
+
+/CLAUDE.md
+.claude/
+
+# README is copied from the monorepo root by `prepublishOnly`.
+packages/agents-wire/README.md

@@ -1,0 +1,18 @@
+{
+  "name": "@pivanov/agents-wire-example-classifier",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pivanov/agents-wire": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}

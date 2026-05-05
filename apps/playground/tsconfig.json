@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "exactOptionalPropertyTypes": false,
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "paths": {
+      "@/*": ["../../packages/agents-wire/src/*"],
+      "@app/*": ["./*"],
+      "@pivanov/agents-wire": ["../../packages/agents-wire/src/index.ts"],
+      "@pivanov/agents-wire/ai-sdk": ["../../packages/agents-wire/src/ai-sdk/index.ts"],
+      "@pivanov/agents-wire/testing": ["../../packages/agents-wire/src/testing/index.ts"],
+      "@pivanov/agents-wire/orchestrate": ["../../packages/agents-wire/src/orchestrate/index.ts"],
+      "@pivanov/agents-wire/catalog": ["../../packages/agents-wire/src/catalog/index.ts"],
+      "@pivanov/agents-wire/errors": ["../../packages/agents-wire/src/errors.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

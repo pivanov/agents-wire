@@ -1,0 +1,33 @@
+{
+  "private": true,
+  "workspaces": ["packages/*", "apps/*", "apps/examples/*"],
+  "scripts": {
+    "build": "bun run --filter '@pivanov/agents-wire' build",
+    "test": "bun run --filter '@pivanov/agents-wire' test",
+    "typecheck": "bun run --filter '@pivanov/agents-wire' typecheck",
+    "knip": "bun run --filter '@pivanov/agents-wire' knip",
+    "lint": "biome check . && bun run typecheck && bun run knip",
+    "lint:fix": "biome check --write .",
+    "check": "bun run lint && bun run test",
+    "docs": "bun --filter agents-wire-docs dev",
+    "docs:build": "bun --filter agents-wire-docs build",
+    "smoke": "bun packages/agents-wire/tests/smoke.ts",
+    "smoke:orchestrate": "bun packages/agents-wire/tests/smoke-orchestrate.ts",
+    "playground": "printf '\\033[1A\\033[2K\\r' ; bun apps/playground/index.tsx",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "bun run build && changeset publish",
+    "publish": "cd packages/agents-wire && npm publish --access public",
+    "example:code-review": "bun apps/examples/code-review-bot/index.ts",
+    "example:research": "bun apps/examples/research-agent/index.ts",
+    "example:classifier": "bun apps/examples/multi-agent-classifier/index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.31.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
