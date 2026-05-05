@@ -1,0 +1,18 @@
+{
+  "name": "agents-wire-docs",
+  "version": "0.0.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "hero:build": "bun scripts/build-hero-code-svg.ts",
+    "og:build": "bun scripts/build-og.ts"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "sharp": "^0.34.5",
+    "vitepress": "~1.5.0"
+  }
+}

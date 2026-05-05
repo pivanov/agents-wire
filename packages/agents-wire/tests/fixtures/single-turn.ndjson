@@ -1,0 +1,5 @@
+{"type":"text-delta","text":"Hello, ","messageId":null}
+{"type":"text-delta","text":"world!","messageId":null}
+{"type":"text-delta","text":" How can I help?","messageId":null}
+{"type":"usage","usage":{"contextSize":1024,"contextUsed":256,"costUsd":0.001}}
+{"type":"finish","stopReason":"end_turn","usage":{"contextSize":1024,"contextUsed":256,"costUsd":0.001},"cost":null}

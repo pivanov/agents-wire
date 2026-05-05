@@ -1,0 +1,147 @@
+export { agents, type IAgentsNamespace } from "./api/agents";
+export { createClient, type IAgentClient } from "./api/client";
+export { detectAvailableAgents, type IDetectionEntry } from "./api/detect";
+export { type IResolvedModels, resolveModels, type TModelSource } from "./api/resolve-models";
+export { createSession, type IAgentSession } from "./api/session";
+export { type IAgentStream, type IStreamFactoryInput, wrapStream } from "./api/stream";
+export {
+  createCostTracker,
+  enforceBudget,
+  getPricing,
+  type IBudgetGuardOptions,
+  type ICostTracker,
+  type ICostTrackerOptions,
+  type IModelPricing,
+  listPricing,
+  setPricing,
+} from "./budget/index";
+export {
+  claude,
+  cline,
+  codex,
+  copilot,
+  cursor,
+  definitionFor,
+  droid,
+  gemini,
+  kilo,
+  listDefinitions,
+  opencode,
+  pi,
+  qwen,
+  registerDefinition,
+  unregisterDefinition,
+} from "./catalog/index";
+export {
+  ACP_PROTOCOL_VERSION,
+  AI_SDK_PROVIDER_OPTIONS_KEY,
+  AUTH_FAILURE_PATTERNS,
+  DEFAULT_INACTIVITY_TIMEOUT_MS,
+  DEFAULT_INITIALIZE_TIMEOUT_MS,
+  PACKAGE_NAME,
+  PACKAGE_TITLE,
+  PACKAGE_VERSION,
+  TRANSIENT_ERROR_PATTERNS,
+  USAGE_LIMIT_PATTERNS,
+} from "./constants";
+export {
+  AbortError,
+  AgentConnectionClosedError,
+  AgentInactivityError,
+  AgentInitTimeoutError,
+  AgentNotInstalledError,
+  AgentUnauthenticatedError,
+  AgentUsageLimitError,
+  BudgetExceededError,
+  CapabilityNotSupportedError,
+  errorMessage,
+  type IJsonValidationIssue,
+  type IWireErrorOptions,
+  isKnownError,
+  isTransientError,
+  JsonValidationError,
+  KNOWN_ERROR_CODES,
+  ProtocolVersionMismatchError,
+  type TKnownErrorCode,
+  WireError,
+} from "./errors";
+export {
+  cascade,
+  createAgentPool,
+  failover,
+  type IAgentPool,
+  type ICascadeOptions,
+  type ICascadeRejection,
+  type ICascadeResult,
+  type ICascadeStage,
+  type IFailoverAttempt,
+  type IFailoverOptions,
+  type IFailoverResult,
+  type IPoolAskResult,
+  type IPoolOptions,
+  type IRaceLoser,
+  type IRaceOptions,
+  type IRaceResult,
+  race,
+} from "./orchestrate/index";
+export { classifyStderrFatal, type IStderrFatalMatch } from "./runtime/host";
+export { allowGate, allowOnceGate, denyGate, isStreamingPolicy, policyToResolver, toPendingPermission } from "./runtime/permissions";
+export {
+  buildJsonGuidance,
+  DEFAULT_JSON_SYSTEM_PROMPT,
+  type IStandardSchema,
+  type IStandardSchemaFailure,
+  type IStandardSchemaIssue,
+  type IStandardSchemaSuccess,
+  isStandardSchema,
+  parseAndValidate,
+  standardSchemaToJsonSchema,
+  stripFences,
+  type TInferOutput,
+  type TSchemaInput,
+  type TStandardSchemaResult,
+} from "./schema/index";
+export {
+  BUILT_IN_TOOL_NAMES,
+  createToolHandler,
+  type IResolvedDecision,
+  type IToolHandlerInstance,
+  isBuiltInTool,
+  type TBuiltInToolName,
+} from "./tools/index";
+export type {
+  IAgentAdapter,
+  IAgentCapabilities,
+  IAgentDefinition,
+  IAgentModelOption,
+  IAvailableCommand,
+  IFileSystemHandlers,
+  IMcpServer,
+  IModelEffort,
+  IPendingPermission,
+  IPermissionOption,
+  IPlanEntry,
+  ISessionOptions,
+  ISlashCommand,
+  ITerminalHandlers,
+  IToolCallLocation,
+  IToolHandler,
+  IToolUseEvent,
+  IUsageReport,
+  IWireLaunchOptions,
+  IWireLaunchSpec,
+  TAgentEvent,
+  TAgentEventType,
+  TAgentId,
+  TBuiltInAgentId,
+  TPermissionPolicy,
+  TRecycleReason,
+  TStopReason,
+  TToolDecision,
+  TToolName,
+  TWarn,
+} from "./types/index";
+export { BUILT_IN_AGENT_IDS } from "./types/index";
+
+export type { IAgentOptions, IAskOptions } from "./types/options";
+export type { IAskResult, ICostBucket, ICostSnapshot, IJsonResult, ISessionInfo, ISessionListPage } from "./types/results";

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "entry": ["tests/smoke.ts", "tests/smoke-orchestrate.ts"],
+  "ignoreDependencies": [
+    "@agentclientprotocol/claude-agent-acp",
+    "@zed-industries/codex-acp"
+  ]
+}

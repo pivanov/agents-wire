@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  agents-wire favicon. Stylised owl face matching the playground
+  mascot, painted with the same five-stop palette
+  (amber → green → sky → indigo → purple). Designed to read at
+  16×16; eye centres are intentionally large so the owl is still
+  recognisable when scaled down.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="aw-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="25%" stop-color="#4ade80"/>
+      <stop offset="50%" stop-color="#38bdf8"/>
+      <stop offset="75%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <radialGradient id="aw-eye" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e9eaff"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded body silhouette -->
+  <rect x="2" y="2" width="28" height="28" rx="7" ry="7" fill="url(#aw-body)"/>
+
+  <!-- Tufts / brow ridges -->
+  <path d="M 7 7 L 11 5 L 11 9 Z" fill="#1e1e2e" opacity="0.55"/>
+  <path d="M 25 7 L 21 5 L 21 9 Z" fill="#1e1e2e" opacity="0.55"/>
+
+  <!-- Eyes -->
+  <circle cx="11" cy="14" r="4.5" fill="url(#aw-eye)"/>
+  <circle cx="21" cy="14" r="4.5" fill="url(#aw-eye)"/>
+  <circle cx="11" cy="14" r="2.2" fill="#1e1e2e"/>
+  <circle cx="21" cy="14" r="2.2" fill="#1e1e2e"/>
+  <!-- Eye highlights -->
+  <circle cx="11.7" cy="13.3" r="0.7" fill="#ffffff" opacity="0.9"/>
+  <circle cx="21.7" cy="13.3" r="0.7" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Beak -->
+  <path d="M 16 17 L 14.5 20 L 17.5 20 Z" fill="#fcd34d" stroke="#1e1e2e" stroke-width="0.5" stroke-linejoin="round"/>
+
+  <!-- Wing scallops -->
+  <path d="M 4 22 Q 9 26 16 24 Q 23 26 28 22 L 28 28 Q 24 30 16 29 Q 8 30 4 28 Z" fill="#1e1e2e" opacity="0.25"/>
+</svg>

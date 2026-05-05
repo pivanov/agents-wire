@@ -1,0 +1,21 @@
+{
+  "name": "@pivanov/agents-wire-playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "play": "bun index.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pivanov/agents-wire": "workspace:*",
+    "ink": "^7.0.1",
+    "react": "^19.2.5",
+    "shiki": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "@types/react": "^19.2.14",
+    "typescript": "^6.0.3"
+  }
+}
