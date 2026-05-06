@@ -1,3 +1,6 @@
+import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { IUsageReport } from "./results";
+
 export type TBuiltInAgentId =
   | "claude"
   | "codex"
@@ -151,6 +154,16 @@ export interface IAgentDefinition {
    * the AI SDK provider so common misspellings don't throw.
    */
   readonly aliases?: readonly string[];
+  /**
+   * Vendor-specific usage extraction. The argument is the ACP
+   * `usage_update` payload; return value is shallow-merged on top of
+   * the stock fields (`contextSize`, `contextUsed`, USD-checked
+   * `costUsd`). Use this only for fields the stock translator doesn't
+   * read (e.g. tokens piggybacking on `_meta`) — don't re-extract
+   * `cost.amount`, the stock path already does it correctly with
+   * currency validation.
+   */
+  readonly translateUsage?: (raw: Extract<SessionUpdate, { sessionUpdate: "usage_update" }>) => Partial<IUsageReport>;
 }
 
 export interface IAgentAdapter {

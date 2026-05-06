@@ -1,5 +1,6 @@
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
 import type { IAsyncQueue } from "@/internal/async-queue";
+import type { IAgentDefinition } from "@/types/agent";
 import type { IAvailableCommand, IPlanEntry, IToolCallLocation, TAgentEvent } from "@/types/events";
 import type { IUsageReport } from "@/types/results";
 
@@ -44,7 +45,7 @@ export const toAvailableCommands = (raw: ReadonlyArray<{ name: string; descripti
   return raw.map((entry) => (entry.description ? { name: entry.name, description: entry.description } : { name: entry.name }));
 };
 
-const toUsageReport = (update: Extract<SessionUpdate, { sessionUpdate: "usage_update" }>): IUsageReport => {
+const stockUsageReport = (update: Extract<SessionUpdate, { sessionUpdate: "usage_update" }>): IUsageReport => {
   const report: IUsageReport = {
     contextSize: update.size,
     contextUsed: update.used,
@@ -55,10 +56,19 @@ const toUsageReport = (update: Extract<SessionUpdate, { sessionUpdate: "usage_up
   return report;
 };
 
+const toUsageReport = (update: Extract<SessionUpdate, { sessionUpdate: "usage_update" }>, def?: IAgentDefinition): IUsageReport => {
+  const base = stockUsageReport(update);
+  if (def?.translateUsage) {
+    return { ...base, ...def.translateUsage(update) };
+  }
+  return base;
+};
+
 interface ITranslateContext {
   readonly state: ISessionStreamState;
   readonly queue: IAsyncQueue<TAgentEvent>;
   readonly clock: () => number;
+  readonly definition?: IAgentDefinition;
 }
 
 export const translate = (update: SessionUpdate, ctx: ITranslateContext): void => {
@@ -148,7 +158,7 @@ export const translate = (update: SessionUpdate, ctx: ITranslateContext): void =
       return;
     }
     case "usage_update": {
-      const usage = toUsageReport(update);
+      const usage = toUsageReport(update, ctx.definition);
       ctx.state.lastUsage = usage;
       ctx.queue.push({ type: "usage", usage });
       return;

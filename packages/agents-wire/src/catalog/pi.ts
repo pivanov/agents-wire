@@ -30,6 +30,7 @@ export const pi: IAgentDefinition = {
   // Cold-start placeholder. Pi never advances past this because its
   // RPC mode isn't ACP-compatible (see header doc).
   models: [{ id: "default", label: "Default" }],
+  aliases: ["pi-coding-agent"],
   launch(options = {}) {
     // `--mode rpc` is the closest thing Pi has to a programmatic
     // interface. It speaks Pi's own JSON dialect, not ACP, so the

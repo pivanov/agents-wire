@@ -14,6 +14,7 @@ export const qwen: IAgentDefinition = {
   // no CLI `--list-models` flag found. resolveModels falls back to
   // "Default" and upgrades from session.configOptions where exposed.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["qwen-code", "qwen-coder"],
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "qwen",

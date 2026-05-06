@@ -148,9 +148,7 @@ export interface IAgentOptions {
    */
   readonly permissionTimeoutMs?: number;
 
-  readonly onAuthRequired?: (methods: readonly { id: string; name: string }[]) => Promise<string | undefined>;
   readonly onWarning?: TWarn;
-  readonly onTrace?: (direction: "out" | "in" | "stderr", payload: unknown) => void;
   readonly onStderr?: (line: string) => void;
 
   readonly meta?: Record<string, unknown>;

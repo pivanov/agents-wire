@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { agentHome } from "@/internal/paths";
 import { probeNodeBridge } from "@/internal/probe";
 import { resolvePackageEntry } from "@/internal/resolve-package";
 import type { IAgentDefinition } from "@/types/agent";
@@ -20,7 +22,10 @@ export const codex: IAgentDefinition = {
   // Per-model reasoning effort still flows through launch flags
   // (-c model_reasoning_effort) regardless of which model is chosen.
   models: [{ id: "default", label: "Default" }],
-  aliases: ["openai-codex"],
+  // L2 fix: dropped "gpt-5" — too ambiguous (other agents can also serve
+  // gpt-5 via routing). Vendor-named aliases only.
+  aliases: ["openai-codex", "openai"],
+  quickCheck: () => existsSync(agentHome("codex", "CODEX_HOME")),
   launch(options = {}) {
     const entry = options.binaryOverride ?? resolvePackageEntry(BRIDGE_ENTRY);
     const args = [entry];

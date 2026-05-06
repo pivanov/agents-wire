@@ -97,6 +97,14 @@ List all agents built in to the SDK (whether or not they're installed).
 agents-wire agents
 ```
 
+## Debugging
+
+Set `AGENTS_WIRE_DEBUG=1` to make the CLI emit full stack traces alongside thrown errors. Default output is terse (one-line message); the debug flag is opt-in so production logs stay clean.
+
+```bash
+AGENTS_WIRE_DEBUG=1 agents-wire ask claude --prompt "..." 2>&1
+```
+
 ## Shell Pipeline Examples
 
 ```bash

@@ -14,25 +14,25 @@ import { qwen } from "./qwen";
 
 export { auggie, claude, cline, codex, copilot, cursor, droid, gemini, kilo, opencode, pi, qwen };
 
-const REGISTRY: Readonly<Record<TBuiltInAgentId, IAgentDefinition>> = {
-  auggie,
+const BUILT_INS = {
   claude,
-  cline,
   codex,
+  gemini,
   copilot,
   cursor,
+  cline,
   droid,
-  gemini,
   kilo,
   opencode,
-  pi,
   qwen,
-};
+  auggie,
+  pi,
+} as const satisfies Record<TBuiltInAgentId, IAgentDefinition>;
 
-const customRegistry = new Map<string, IAgentDefinition>();
+const customRegistry = new Map<TAgentId, IAgentDefinition>();
 
 export const definitionFor = (id: TAgentId): IAgentDefinition => {
-  const builtIn = REGISTRY[id as TBuiltInAgentId];
+  const builtIn = (BUILT_INS as Readonly<Record<string, IAgentDefinition>>)[id];
   if (builtIn) {
     return builtIn;
   }
@@ -46,7 +46,7 @@ export const definitionFor = (id: TAgentId): IAgentDefinition => {
   if (aliased && aliased !== id) {
     return definitionFor(aliased);
   }
-  throw new Error(`Unknown agent "${id}". Built-ins: ${Object.keys(REGISTRY).join(", ")}`);
+  throw new Error(`Unknown agent "${id}". Built-ins: ${Object.keys(BUILT_INS).join(", ")}`);
 };
 
 /**
@@ -56,10 +56,10 @@ export const definitionFor = (id: TAgentId): IAgentDefinition => {
  * throw path. Exact id matches short-circuit immediately.
  */
 export const resolveAgentAlias = (input: string): TAgentId | null => {
-  if (REGISTRY[input as TBuiltInAgentId] || customRegistry.has(input)) {
+  if ((BUILT_INS as Record<string, unknown>)[input] !== undefined || customRegistry.has(input)) {
     return input;
   }
-  for (const def of [...Object.values(REGISTRY), ...customRegistry.values()]) {
+  for (const def of [...Object.values(BUILT_INS), ...customRegistry.values()]) {
     if (def.aliases?.includes(input)) {
       return def.id;
     }
@@ -67,13 +67,18 @@ export const resolveAgentAlias = (input: string): TAgentId | null => {
   return null;
 };
 
-export const registerDefinition = (definition: IAgentDefinition): void => {
-  if (REGISTRY[definition.id as TBuiltInAgentId]) {
-    throw new Error(`Cannot override built-in agent "${definition.id}"`);
+export const registerDefinition = (def: IAgentDefinition): void => {
+  if ((BUILT_INS as Record<string, unknown>)[def.id] !== undefined) {
+    throw new Error(`Cannot override built-in agent: ${def.id}`);
   }
-  customRegistry.set(definition.id, definition);
+  customRegistry.set(def.id, def);
 };
 
-export const unregisterDefinition = (id: string): boolean => customRegistry.delete(id);
+export const unregisterDefinition = (id: TAgentId): boolean => {
+  if ((BUILT_INS as Record<string, unknown>)[id] !== undefined) {
+    throw new Error(`Cannot unregister built-in agent: ${id}`);
+  }
+  return customRegistry.delete(id);
+};
 
-export const listDefinitions = (): readonly IAgentDefinition[] => [...Object.values(REGISTRY), ...customRegistry.values()];
+export const listDefinitions = (): readonly IAgentDefinition[] => [...Object.values(BUILT_INS), ...customRegistry.values()];

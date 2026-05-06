@@ -14,6 +14,7 @@ export const cline: IAgentDefinition = {
   // documented, so resolveModels falls back to "Default" pre-init and
   // upgrades from session.configOptions if Cline declares them.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["cline-cli"],
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "cline",

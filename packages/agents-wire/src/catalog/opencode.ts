@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { listOpencodeModels } from "@/internal/list-models";
+import { agentHome } from "@/internal/paths";
 import { probeBinaryVersion } from "@/internal/probe";
 import type { IAgentDefinition } from "@/types/agent";
 
@@ -15,6 +17,7 @@ export const opencode: IAgentDefinition = {
   // entries with `effort: { kind: "none" }` since OpenCode doesn't
   // expose a reasoning-effort knob.
   models: [{ id: "default", label: "Default" }],
+  quickCheck: () => existsSync(agentHome("opencode")),
   launch(options = {}) {
     // `opencode acp` does not advertise --model (verified via --help). Model
     // selection flows through ACP modelPreference if OpenCode implements it.

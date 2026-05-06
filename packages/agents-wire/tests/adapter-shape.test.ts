@@ -18,7 +18,8 @@ type DefinitionOnlyFields =
   | "nativeSystemPrompt"
   | "quickCheck"
   | "legacyDirs"
-  | "aliases";
+  | "aliases"
+  | "translateUsage";
 
 type ExtraInDefinition = Exclude<keyof IAgentDefinition, AdapterFields>;
 type ExtraInAdapter = Exclude<keyof IAgentAdapter, AdapterFields>;

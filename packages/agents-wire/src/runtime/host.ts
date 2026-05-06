@@ -416,6 +416,7 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
       state: record.active.state,
       queue: record.active.queue,
       clock,
+      definition,
     });
   };
 
@@ -637,6 +638,31 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     return sessionId;
   };
 
+  // Resolve additionalDirectories from session-level options (NOT per-call —
+  // newSession/loadSession deliberately don't accept it; the option lives on
+  // ISessionOptions). Loose handling: gate by capability, warn-once-per-host
+  // when the caller passed a list but the agent doesn't advertise the
+  // capability. additionalDirectories is purely additive context, so silent
+  // degradation produces a working session with reduced scope vs. a hard
+  // failure. Documented in the CHANGELOG.
+  let additionalDirectoriesWarned = false;
+  const resolveAdditionalDirectories = (): readonly string[] | undefined => {
+    const list = options.additionalDirectories;
+    if (!list || list.length === 0) {
+      return undefined;
+    }
+    if (!capabilities.additionalDirectories) {
+      if (!additionalDirectoriesWarned) {
+        additionalDirectoriesWarned = true;
+        options.onWarning?.(
+          `Agent "${definition.id}" does not advertise additionalDirectories capability — ignoring ${list.length} entr${list.length === 1 ? "y" : "ies"}.`,
+        );
+      }
+      return undefined;
+    }
+    return list;
+  };
+
   const newSession: IWireHost["newSession"] = async (input = {}) => {
     if (fatalError) {
       throw fatalError;
@@ -645,9 +671,11 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     const inputServers = input.mcpServers ?? options.mcpServers ?? [];
     validateMcpServers(inputServers);
     const mcpServers = inputServers.map(adaptMcpServer);
+    const additionalDirectories = resolveAdditionalDirectories();
     const response = await acp.newSession({
       cwd,
       mcpServers,
+      ...(additionalDirectories ? { additionalDirectories: [...additionalDirectories] } : {}),
       ...(input.meta ? { _meta: input.meta } : {}),
     });
     return finalizeSession(response.sessionId as SessionId, cwd, mcpServers, response);
@@ -664,10 +692,12 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     const inputServers = input.mcpServers ?? options.mcpServers ?? [];
     validateMcpServers(inputServers);
     const mcpServers = inputServers.map(adaptMcpServer);
+    const additionalDirectories = resolveAdditionalDirectories();
     const response = await acp.loadSession({
       sessionId: input.sessionId,
       cwd,
       mcpServers,
+      ...(additionalDirectories ? { additionalDirectories: [...additionalDirectories] } : {}),
       ...(input.meta ? { _meta: input.meta } : {}),
     });
     return finalizeSession(input.sessionId as SessionId, cwd, mcpServers, response);

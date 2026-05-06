@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { agentHome } from "@/internal/paths";
 import { probeNodeBridge } from "@/internal/probe";
 import { resolvePackageEntry } from "@/internal/resolve-package";
 import type { IAgentDefinition } from "@/types/agent";
@@ -17,6 +19,7 @@ export const claude: IAgentDefinition = {
   // selectors at newSession time, no auth required). See `resolveModels`.
   models: [{ id: "default", label: "Default" }],
   aliases: ["claude-code", "claude-agent"],
+  quickCheck: () => existsSync(agentHome("claude", "CLAUDE_CONFIG_DIR")),
   nativeSystemPrompt: true,
   launch(options = {}) {
     const entry = options.binaryOverride ?? resolvePackageEntry(BRIDGE_ENTRY);

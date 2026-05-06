@@ -14,6 +14,7 @@ export const kilo: IAgentDefinition = {
   // `listKiloModels`). resolveModels parses provider/model rows and
   // tags effort by what each upstream model declares.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["kilo-cli", "kilocode"],
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "kilo",

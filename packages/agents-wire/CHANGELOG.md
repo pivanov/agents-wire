@@ -2,8 +2,27 @@
 
 ## 0.0.5
 
-Pre-publish hardening pass. No public-API removals; a few new opt-in fields
-on existing interfaces. Existing callers should see only fixes.
+Pre-publish hardening pass. A few new opt-in fields on existing
+interfaces and one behavior tightening on `unregisterDefinition`.
+Otherwise existing callers should see only fixes.
+
+### Behavior changes
+
+- **`unregisterDefinition(builtInId)` now throws** instead of silently
+  returning `false`. The previous no-op was hiding bugs in callers that
+  thought they had unregistered a built-in. Custom registrations still
+  work as before.
+- **`ISessionOptions.onAuthRequired` and `onTrace` removed.** Both were
+  declared on the public type but never invoked anywhere in the runtime.
+  Setting them previously did nothing; removing them surfaces that
+  reality at the type level. Will be re-introduced when the auth-retry
+  flow / trace event contract is actually implemented.
+- **`additionalDirectories` is now forwarded** to `acp.newSession` and
+  `acp.loadSession` (was silently dropped). When the agent doesn't
+  advertise the `additionalDirectories` capability the list is dropped
+  with an `onWarning` (not a throw — `additionalDirectories` is purely
+  additive context, so silent degradation produces a working session
+  with reduced scope rather than a hard failure).
 
 ### Fixes
 
@@ -85,7 +104,18 @@ on existing interfaces. Existing callers should see only fixes.
 
 - **`IAgentDefinition.nativeSystemPrompt?: boolean`** — replaces the
   hardcoded `agentId === "claude"` check for native system-prompt routing.
-  Set on `claude` catalog entry.
+- **`IAgentDefinition.quickCheck?: () => boolean`** — cheap sync pre-filter
+  gating the subprocess-spawning `probe`. Cursor adopts it
+  (`existsSync(~/.cursor)`) so a generic `agent` binary on PATH from an
+  unrelated tool no longer false-positives detection.
+- **`IAgentDefinition.legacyDirs?: readonly string[]`** — graveyard for
+  renamed config dirs; `detect.ts` checks them before declaring
+  unavailable.
+- **`IAgentDefinition.aliases?: readonly string[]`** + `resolveAgentAlias()`
+  exported from `@pivanov/agents-wire` and `/catalog`. Common misspellings
+  (`claude-code` → `claude`, `openai-codex` → `codex`, `github-copilot` →
+  `copilot`, `gemini-cli` → `gemini`, `factory-droid` → `droid`,
+  `augment` → `auggie`, `cursor-agent` → `cursor`) now resolve.
 - **`ICostTrackerOptions.onWarning?: (msg: string) => void`** — surfaces
   one-shot warnings when budget enforcement is silently a no-op (unknown
   pricing for the model OR the usage event carried no costUsd and no
@@ -93,8 +123,21 @@ on existing interfaces. Existing callers should see only fixes.
 - **`standardSchemaToJsonSchema(schema, onWarning?)`** — emits a warning
   when Zod has no `toJSONSchema` (Zod v3) or the vendor is unknown, so the
   caller knows schema guidance was dropped.
+- **`isBuiltInTool(name, agentId?)`** — second argument scopes lookup to
+  one agent's namespace (`isBuiltInTool("Read", "codex")` → false).
+- **`WireError.toJSON()`** — `JSON.stringify(err)` keeps `name`, `message`,
+  `code`, `agent`, and `stack` for logging pipelines.
 - **`AGENTS_WIRE_DEBUG=1`** env var on the CLI emits stack traces for
   failed commands.
+
+### Security
+
+- **Terminal-escape stripping** in `errors.ts:redactSecrets` — stderr
+  tails routed through ANSI / OSC / DCS / C1 / control sanitization
+  before secret-pattern matching. Defends against CVE-2003-0063-class
+  terminal-emulator parser bugs and OSC-52 clipboard hijacking from
+  untrusted agent output. ACP wire data is never sanitized — only
+  display strings.
 
 ### Build
 

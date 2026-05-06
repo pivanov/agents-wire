@@ -13,7 +13,7 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["bun"],
+    "types": ["bun", "node"],
     "paths": {
       "@/*": ["../../../packages/agents-wire/src/*"],
       "@pivanov/agents-wire": ["../../../packages/agents-wire/src/index.ts"],

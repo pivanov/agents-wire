@@ -191,6 +191,12 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\b(?:secret|token|key|password|api[_-]?key)["':=\s]+[A-Fa-f0-9]{40,80}\b/gi,
 ];
 
+// Key=value redaction. Catches `password=abc123`, `api_key: shorthex`,
+// `auth_token = "..."` shapes regardless of value length / charset.
+// Captures the key + the original separator so the redacted output
+// preserves the input shape (`password: <REDACTED>` vs `password=...`).
+const KEY_VALUE_SECRET = /\b(password|secret|api[_-]?key|auth[_-]?token|access[_-]?token)(\s*[=:]\s*)["']?([A-Za-z0-9._-]+)["']?/gi;
+
 // Auth-context heuristic: when the line names a sensitivity word
 // ("auth", "unauthorized", "forbidden", "invalid token", …) we widen
 // redaction to bare 40+-char hex tokens too. Many CLIs print
@@ -207,6 +213,9 @@ export const redactSecrets = (line: string): string => {
   for (const pattern of SECRET_PATTERNS) {
     out = out.replace(pattern, "[REDACTED]");
   }
+  // Key=value form runs after the strict patterns so a prefixed token
+  // (e.g. `password="Bearer xxx"`) doesn't double-replace.
+  out = out.replace(KEY_VALUE_SECRET, (_, key: string, sep: string) => `${key}${sep}[REDACTED]`);
   if (AUTH_CONTEXT.test(out)) {
     out = out.replace(BARE_HEX_TOKEN, "[REDACTED]");
   }

@@ -8,6 +8,8 @@ coverage
 .env.local
 bun.lock.bak
 apps/docs/reference/
+apps/docs/.vitepress/cache/
+apps/docs/.vitepress/dist/
 
 /CLAUDE.md
 .claude/

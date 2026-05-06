@@ -6,6 +6,7 @@ import { agents } from "@/api/agents";
 import { definitionFor, listDefinitions } from "@/catalog/index";
 import { PACKAGE_VERSION } from "@/constants";
 import { isKnownError } from "@/errors";
+import { stripTerminalEscapes } from "@/internal/strip-terminal-escapes";
 import type { TAgentId } from "@/types/agent";
 import type { IAskOptions } from "@/types/options";
 
@@ -298,17 +299,17 @@ main().then(
       if (includeStack && error.stack) {
         payload.stack = error.stack;
       }
-      process.stderr.write(`${JSON.stringify(payload)}\n`);
+      process.stderr.write(`${stripTerminalEscapes(JSON.stringify(payload))}\n`);
       process.exit(2);
     }
     if (error instanceof Error) {
-      process.stderr.write(`${error.message}\n`);
+      process.stderr.write(`${stripTerminalEscapes(error.message)}\n`);
       if (includeStack && error.stack) {
-        process.stderr.write(`${error.stack}\n`);
+        process.stderr.write(`${stripTerminalEscapes(error.stack)}\n`);
       }
       process.exit(1);
     }
-    process.stderr.write(`${String(error)}\n`);
+    process.stderr.write(`${stripTerminalEscapes(String(error))}\n`);
     process.exit(1);
   },
 );

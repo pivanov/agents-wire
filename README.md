@@ -1,7 +1,7 @@
-# agents-wire
+# @pivanov/agents-wire
 
-[![npm](https://img.shields.io/npm/v/@pivanov/agents-wire?cacheSeconds=300)](https://www.npmjs.com/package/@pivanov/agents-wire)
-[![license](https://img.shields.io/npm/l/@pivanov/agents-wire?cacheSeconds=300)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@pivanov/agents-wire)](https://www.npmjs.com/package/@pivanov/agents-wire)
+[![license](https://img.shields.io/npm/l/@pivanov/agents-wire)](./LICENSE)
 
 One TypeScript SDK for **every local coding agent**. Drives Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode, Factory Droid, Pi, Cline, Kilo, Qwen Code, and Augment Code (Auggie) over the [Agent Client Protocol](https://agentclientprotocol.com), with cost budgets, structured JSON, tool middleware, multi-agent orchestration, and a Vercel AI SDK provider (LanguageModelV3, `ai@^6`).
 
@@ -127,7 +127,7 @@ const { data } = await agents.askJson("claude", "Read src/auth.ts and report iss
 console.log(data.title, data.severity);
 ```
 
-Works with **Zod 4**, **Valibot** (with `@valibot/to-json-schema` installed), and **ArkType**. You can also pass a raw JSON Schema string.
+Works with **Zod 4**, **Valibot** (with `@valibot/to-json-schema` installed), and **ArkType**. You can pass a raw JSON Schema string for **prompt guidance only** — `askJson` will steer the agent toward that shape but cannot validate the response. For validated output, pass a Standard Schema instance.
 
 ### Tool middleware
 
@@ -267,6 +267,18 @@ const turn2 = await mock.ask("what was it?");          // → "porcupine"
 - POSIX (macOS, Linux, WSL). Native Windows isn't supported.
 - The agent CLIs you want to drive must be installed and authenticated on the host machine.
 
+## Troubleshooting
+
+### Global bin resolution
+
+When agent bridges (`@agentclientprotocol/claude-agent-acp`, `@github/copilot`, `@google/gemini-cli`) are installed globally rather than as workspace deps, agents-wire walks `npm root -g`, your Node prefix, and conventional system roots (`/usr/local`, `/opt/homebrew`, `~/.npm-global`, `~/.local`). If your global root is in a non-standard location (custom `npm config prefix`, isolated Volta/asdf install), set:
+
+```bash
+export AGENTS_WIRE_GLOBAL_NODE_MODULES=/path/to/your/global/node_modules
+```
+
+The override is consulted first; resolution falls through to the standard search if the override doesn't contain the requested package.
+
 ## Development
 
 ```bash
@@ -279,6 +291,10 @@ bun run --filter '@pivanov/agents-wire' build
 bun packages/agents-wire/tests/smoke.ts
 bun packages/agents-wire/tests/smoke-orchestrate.ts
 ```
+
+## Sponsors
+
+Supported by [LogicStar AI](https://logicstar.ai/).
 
 ## License
 

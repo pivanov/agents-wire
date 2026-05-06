@@ -1,6 +1,6 @@
 {
   "name": "@pivanov/agents-wire",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "One TypeScript SDK for every local coding agent. ACP transport, Vercel AI SDK provider, cost budgets, structured JSON, multi-agent orchestration.",
   "type": "module",
   "publishConfig": {

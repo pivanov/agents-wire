@@ -151,11 +151,15 @@ When multiple options are set, they're evaluated in this order:
 ```ts
 import { BUILT_IN_TOOL_NAMES, isBuiltInTool } from "@pivanov/agents-wire";
 
-console.log(BUILT_IN_TOOL_NAMES); // ["Read", "Write", "Edit", "Bash", ...]
-console.log(isBuiltInTool("Read")); // true
+console.log(BUILT_IN_TOOL_NAMES); // flattened set across every known agent
+console.log(isBuiltInTool("Read")); // true (any agent declares it)
+console.log(isBuiltInTool("Read", "claude")); // true (Claude declares it)
+console.log(isBuiltInTool("Read", "codex")); // false (Codex uses snake_case)
 console.log(isBuiltInTool("my-mcp-tool")); // false
 ```
 
+Pass the optional `agentId` to scope the lookup to one agent's namespace — handy when allow/block lists need to differ per agent (Claude's `Read` vs Codex's `read_file`).
+
 ::: warning
-`BUILT_IN_TOOL_NAMES` is a best-effort snapshot for Claude Code tools. For the authoritative list for any agent, check the `tools` array in the `session-meta` event from a live session.
+`BUILT_IN_TOOL_NAMES` is a best-effort snapshot. For the authoritative list for any agent, check the `tools` array in the `session-meta` event from a live session.
 :::

@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
 // Centralized home / config-dir resolution. Catalog `quickCheck` hooks
@@ -6,6 +6,27 @@ import { join } from "node:path";
 // adjustment lands in one place. Pure helpers; no side effects.
 
 export const HOME = homedir();
+
+/**
+ * @public
+ * Resolve the user's XDG-style config root. Honors `XDG_CONFIG_HOME`,
+ * falls back to `LOCALAPPDATA` on Windows, then `~/.config`. Exported as
+ * forward-compat infra for catalog `quickCheck` callers that need the
+ * cross-platform variant rather than `agentHome()`.
+ */
+export const xdgConfigHome = (): string => {
+  const explicit = process.env.XDG_CONFIG_HOME?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  if (platform() === "win32") {
+    const appData = process.env.LOCALAPPDATA?.trim();
+    if (appData) {
+      return appData;
+    }
+  }
+  return join(HOME, ".config");
+};
 
 /**
  * Resolve an agent's expected config dir. If `envVar` is set in the

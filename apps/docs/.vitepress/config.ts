@@ -102,6 +102,7 @@ export default defineConfig({
           { text: "Stream", link: "/api/stream" },
           { text: "Events", link: "/api/events" },
           { text: "JSON (askJson)", link: "/api/json" },
+          { text: "Capabilities", link: "/api/capabilities" },
           { text: "Errors", link: "/api/errors" },
           { text: "Subpath Exports", link: "/api/subpaths" },
           { text: "Testing", link: "/api/testing" },

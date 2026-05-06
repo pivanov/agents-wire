@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { listAuggieModels } from "@/internal/list-models";
+import { agentHome } from "@/internal/paths";
 import { probeBinaryVersion } from "@/internal/probe";
 import type { IAgentDefinition } from "@/types/agent";
 
@@ -14,6 +16,7 @@ export const auggie: IAgentDefinition = {
   // so logged-out users see only "Default" until they sign in.
   models: [{ id: "default", label: "Default" }],
   aliases: ["augment", "augmentcode"],
+  quickCheck: () => existsSync(agentHome("augment")),
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "auggie",
