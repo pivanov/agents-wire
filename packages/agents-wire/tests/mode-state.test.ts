@@ -77,7 +77,10 @@ describe("mode state tracking", () => {
     const getModeState = (sessionId: string) => sessions.get(sessionId)?.modeState;
 
     // Simulate what handleSessionUpdate does
-    const record = sessions.get("sess-1")!;
+    const record = sessions.get("sess-1");
+    if (!record) {
+      throw new Error("expected sess-1");
+    }
     record.modeState = applyModeUpdate(record.modeState, {
       sessionUpdate: "current_mode_update",
       currentModeId: "plan",

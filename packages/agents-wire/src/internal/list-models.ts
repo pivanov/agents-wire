@@ -5,17 +5,27 @@ const LIST_TIMEOUT_MS = 5_000;
 const MAX_OUTPUT_BYTES = 1_048_576; // 1 MB cap so a runaway CLI cannot OOM the SDK
 const KILL_GRACE_MS = 500; // SIGTERM grace period before SIGKILL escalation
 
+interface ICaptureOptions {
+  /** Surfaces spawn / exit-code / stderr-only failures so model-list bugs aren't invisible. */
+  readonly onWarning?: (message: string) => void;
+}
+
 /** Spawn a CLI and capture its stdout. Returns "" on any failure. */
-const captureStdout = (binary: string, args: readonly string[]): Promise<string> =>
+const captureStdout = (binary: string, args: readonly string[], opts: ICaptureOptions = {}): Promise<string> =>
   new Promise((resolve) => {
     let spawned: ReturnType<typeof spawn>;
     try {
-      spawned = spawn(binary, [...args], { stdio: ["ignore", "pipe", "ignore"] });
-    } catch {
+      // Pipe stderr (was "ignore") so a CLI that writes diagnostics to
+      // stderr-only on auth/login failure surfaces something actionable
+      // via onWarning rather than silently returning an empty list.
+      spawned = spawn(binary, [...args], { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (cause) {
+      opts.onWarning?.(`spawn ${binary} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
       resolve("");
       return;
     }
     let out = "";
+    let stderrTail = "";
     let truncated = false;
     spawned.stdout?.setEncoding("utf-8");
     spawned.stdout?.on("data", (chunk: string) => {
@@ -30,39 +40,60 @@ const captureStdout = (binary: string, args: readonly string[]): Promise<string>
         finish(out);
       }
     });
+    spawned.stderr?.setEncoding("utf-8");
+    spawned.stderr?.on("data", (chunk: string) => {
+      // Cap stderr buffering so a chatty CLI can't OOM us; the warning is
+      // diagnostic, not a transcript.
+      if (stderrTail.length < 4096) {
+        stderrTail += chunk;
+      }
+    });
     let settled = false;
     let killEscalation: ReturnType<typeof setTimeout> | undefined;
-    const finish = (value: string): void => {
+    // `kill` controls whether finish() proactively SIGTERMs and arms a
+    // SIGKILL escalation timer. Only the timeout / truncation paths need
+    // it; the natural-exit path skips both so we don't pin the loop on a
+    // 500 ms timer waiting to kill an already-dead pid.
+    const finish = (value: string, kill: boolean = true): void => {
       if (settled) {
         return;
       }
       settled = true;
-      try {
-        spawned.kill(); // SIGTERM
-      } catch {
-        /* swallow */
-      }
-      // If the process ignores SIGTERM, escalate to SIGKILL after a grace period.
-      killEscalation = setTimeout(() => {
+      if (kill) {
         try {
-          spawned.kill("SIGKILL");
+          spawned.kill(); // SIGTERM
         } catch {
-          /* already exited */
+          /* swallow */
         }
-      }, KILL_GRACE_MS);
+        killEscalation = setTimeout(() => {
+          try {
+            spawned.kill("SIGKILL");
+          } catch {
+            /* already exited */
+          }
+        }, KILL_GRACE_MS);
+        killEscalation.unref?.();
+      }
       resolve(value);
     };
-    const handle = setTimeout(() => finish(""), LIST_TIMEOUT_MS);
-    spawned.once("error", () => {
-      clearTimeout(handle);
+    const handle = setTimeout(() => {
+      opts.onWarning?.(`${binary} ${args.join(" ")} timed out after ${LIST_TIMEOUT_MS}ms`);
       finish("");
+    }, LIST_TIMEOUT_MS);
+    spawned.once("error", (err) => {
+      clearTimeout(handle);
+      opts.onWarning?.(`${binary} ${args.join(" ")} errored: ${err.message}`);
+      finish("", false);
     });
     spawned.once("exit", (code) => {
       clearTimeout(handle);
       if (killEscalation) {
         clearTimeout(killEscalation);
       }
-      finish(code === 0 ? out : "");
+      if (code !== 0 && stderrTail.trim().length > 0) {
+        opts.onWarning?.(`${binary} ${args.join(" ")} exited ${code}: ${stderrTail.trim().slice(0, 256)}`);
+      }
+      finish(code === 0 ? out : "", false);
     });
   });
 

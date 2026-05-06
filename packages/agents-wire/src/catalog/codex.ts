@@ -20,6 +20,7 @@ export const codex: IAgentDefinition = {
   // Per-model reasoning effort still flows through launch flags
   // (-c model_reasoning_effort) regardless of which model is chosen.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["openai-codex"],
   launch(options = {}) {
     const entry = options.binaryOverride ?? resolvePackageEntry(BRIDGE_ENTRY);
     const args = [entry];

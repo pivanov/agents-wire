@@ -24,6 +24,13 @@ const mergeSettings = (defaults: IAgentOptions, overrides: IAgentOptions = {}): 
   if (overrides.meta !== undefined && defaults.meta !== undefined) {
     merged.meta = { ...defaults.meta, ...overrides.meta };
   }
+  if (overrides.mcpServers !== undefined && defaults.mcpServers !== undefined) {
+    const byName = new Map(defaults.mcpServers.map((s) => [s.name, s]));
+    for (const s of overrides.mcpServers) {
+      byName.set(s.name, s);
+    }
+    merged.mcpServers = Array.from(byName.values());
+  }
   return merged;
 };
 

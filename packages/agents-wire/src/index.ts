@@ -16,6 +16,7 @@ export {
   setPricing,
 } from "./budget/index";
 export {
+  auggie,
   claude,
   cline,
   codex,
@@ -30,6 +31,7 @@ export {
   pi,
   qwen,
   registerDefinition,
+  resolveAgentAlias,
   unregisterDefinition,
 } from "./catalog/index";
 export {

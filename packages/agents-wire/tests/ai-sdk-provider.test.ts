@@ -1,10 +1,10 @@
-import { NoSuchModelError, type LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { describe, expect, test } from "bun:test";
-import { AI_SDK_PROVIDER_OPTIONS_KEY } from "@/constants";
-import type { IAgentAdapter } from "@/types/agent";
-import { createAgentProvider } from "@/ai-sdk/provider";
+import { type LanguageModelV3StreamPart, NoSuchModelError } from "@ai-sdk/provider";
 import { createAgentLanguageModel, type IAgentSettingsInternal } from "@/ai-sdk/language-model";
+import { createAgentProvider } from "@/ai-sdk/provider";
+import { AI_SDK_PROVIDER_OPTIONS_KEY } from "@/constants";
 import { connectMockHost, type IMockHostScript } from "@/testing/mock-host";
+import type { IAgentAdapter } from "@/types/agent";
 
 // Helper: build a minimal IAgentAdapter fixture
 const makeAdapter = (id = "test-custom-agent"): IAgentAdapter => ({
@@ -166,13 +166,18 @@ const drainStream = async (model: ReturnType<typeof createAgentLanguageModel>): 
   const reader = result.stream.getReader();
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      break;
+    }
     parts.push(value);
   }
   return parts;
 };
 
-const buildScriptedModel = async (script: IMockHostScript, extraOptions: Partial<IAgentSettingsInternal> = {}): Promise<ReturnType<typeof createAgentLanguageModel>> => {
+const buildScriptedModel = async (
+  script: IMockHostScript,
+  extraOptions: Partial<IAgentSettingsInternal> = {},
+): Promise<ReturnType<typeof createAgentLanguageModel>> => {
   const ctx = await connectMockHost(script);
   const sessionId = await ctx.host.newSession();
   return createAgentLanguageModel("claude", {
@@ -279,7 +284,9 @@ describe("doStream - integration via _bootstrap", () => {
     const reader = result.stream.getReader();
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       parts.push(value);
     }
     const start = parts.find((p) => p.type === "stream-start") as Extract<LanguageModelV3StreamPart, { type: "stream-start" }> | undefined;

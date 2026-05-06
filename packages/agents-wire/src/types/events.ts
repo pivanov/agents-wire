@@ -61,7 +61,6 @@ export type TAgentEvent =
   | { readonly type: "config-options"; readonly options: readonly SessionConfigOption[] }
   | { readonly type: "session-info"; readonly title: string | undefined; readonly updatedAt: string | undefined }
   | { readonly type: "usage"; readonly usage: IUsageReport }
-  | { readonly type: "cost"; readonly cost: ICostSnapshot }
   | {
       readonly type: "finish";
       readonly stopReason: TStopReason;

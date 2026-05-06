@@ -17,6 +17,7 @@ export const gemini: IAgentDefinition = {
   // newSession returns configOptions. Pre-auth users see "Default"
   // only; post-auth, `resolveModels` upgrades to the real list.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["gemini-cli", "google-gemini"],
   launch(options = {}) {
     if (options.binaryOverride) {
       return {

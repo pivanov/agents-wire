@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { IAgentOptions } from "@/types/options";
 import type { ISpawnOptions } from "@/internal/spawn";
+import type { IAgentOptions } from "@/types/options";
 
 // Unit tests for the envFilter feature (no real process spawning).
 // These tests exercise the filter semantics in isolation by replicating the
@@ -44,14 +44,14 @@ describe("envFilter - merge precedence", () => {
     const launchSpecEnv = { MY_VAR: "from-launch-spec" };
     const optionsEnv = { MY_VAR: "from-options" };
     const result = applyMergeAndFilter(parent, launchSpecEnv, optionsEnv, undefined);
-    expect(result["MY_VAR"]).toBe("from-options");
+    expect(result.MY_VAR).toBe("from-options");
   });
 
   test("parentEnv keys not overridden when absent from extra", () => {
     const parent: NodeJS.ProcessEnv = { PATH: "/usr/bin", HOME: "/home/user" };
     const result = applyMergeAndFilter(parent, undefined, undefined, undefined);
-    expect(result["PATH"]).toBe("/usr/bin");
-    expect(result["HOME"]).toBe("/home/user");
+    expect(result.PATH).toBe("/usr/bin");
+    expect(result.HOME).toBe("/home/user");
   });
 
   test("merged env contains keys from all three sources", () => {
@@ -59,9 +59,9 @@ describe("envFilter - merge precedence", () => {
     const launchSpecEnv = { FROM_SPEC: "yes" };
     const optionsEnv = { FROM_OPT: "yes" };
     const result = applyMergeAndFilter(parent, launchSpecEnv, optionsEnv, undefined);
-    expect(result["FROM_PARENT"]).toBe("yes");
-    expect(result["FROM_SPEC"]).toBe("yes");
-    expect(result["FROM_OPT"]).toBe("yes");
+    expect(result.FROM_PARENT).toBe("yes");
+    expect(result.FROM_SPEC).toBe("yes");
+    expect(result.FROM_OPT).toBe("yes");
   });
 });
 
@@ -79,9 +79,9 @@ describe("envFilter - filter invocation and effect", () => {
 
     applyMergeAndFilter(parent, launchSpecEnv, optionsEnv, filter);
 
-    expect(captured?.["PARENT_KEY"]).toBe("parent");
-    expect(captured?.["SPEC_KEY"]).toBe("spec");
-    expect(captured?.["OPT_KEY"]).toBe("opt");
+    expect(captured?.PARENT_KEY).toBe("parent");
+    expect(captured?.SPEC_KEY).toBe("spec");
+    expect(captured?.OPT_KEY).toBe("opt");
   });
 
   test("filter stripping SECRET_ prefix keys removes them from env passed to spawn", () => {
@@ -103,7 +103,7 @@ describe("envFilter - filter invocation and effect", () => {
 
     const result = applyMergeAndFilter(parent, undefined, undefined, stripSecrets);
 
-    expect(result["PATH"]).toBe("/usr/bin");
+    expect(result.PATH).toBe("/usr/bin");
     expect("SECRET_DB_PASS" in result).toBe(false);
     expect("SECRET_API_KEY" in result).toBe(false);
   });
@@ -111,7 +111,7 @@ describe("envFilter - filter invocation and effect", () => {
   test("when envFilter is undefined, merged env is returned verbatim", () => {
     const parent: NodeJS.ProcessEnv = { KEEP: "me" };
     const result = applyMergeAndFilter(parent, undefined, undefined, undefined);
-    expect(result["KEEP"]).toBe("me");
+    expect(result.KEEP).toBe("me");
   });
 
   test("filter return value is used as-is (can add or transform keys)", () => {
@@ -120,8 +120,8 @@ describe("envFilter - filter invocation and effect", () => {
 
     const result = applyMergeAndFilter(parent, undefined, undefined, addKey);
 
-    expect(result["ORIGINAL"]).toBe("yes");
-    expect(result["ADDED_BY_FILTER"]).toBe("injected");
+    expect(result.ORIGINAL).toBe("yes");
+    expect(result.ADDED_BY_FILTER).toBe("injected");
   });
 });
 

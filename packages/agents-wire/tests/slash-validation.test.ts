@@ -5,20 +5,14 @@
  * so we can test it in isolation without spinning up an agent process.
  */
 import { describe, expect, test } from "bun:test";
-import { validateSlashCommand } from "@/runtime/host";
 import { WireError } from "@/errors";
+import { validateSlashCommand } from "@/runtime/host";
 
 // ─── tests ───────────────────────────────────────────────────────────────────
 
 describe("validateSlashCommand", () => {
   test("throws WireError when command is not in the advertised list", () => {
-    expect(() =>
-      validateSlashCommand(
-        { name: "unknown-cmd" },
-        [{ name: "create_plan", description: "Create a plan" }],
-        "claude",
-      ),
-    ).toThrow(WireError);
+    expect(() => validateSlashCommand({ name: "unknown-cmd" }, [{ name: "create_plan", description: "Create a plan" }], "claude")).toThrow(WireError);
   });
 
   test("error message contains the command name and agent id", () => {
@@ -34,37 +28,24 @@ describe("validateSlashCommand", () => {
   });
 
   test("is permissive when availableCommands is undefined (not yet received)", () => {
-    expect(() =>
-      validateSlashCommand({ name: "any-cmd" }, undefined, "claude"),
-    ).not.toThrow();
+    expect(() => validateSlashCommand({ name: "any-cmd" }, undefined, "claude")).not.toThrow();
   });
 
   test("is permissive when availableCommands is an empty array", () => {
-    expect(() =>
-      validateSlashCommand({ name: "any-cmd" }, [], "claude"),
-    ).not.toThrow();
+    expect(() => validateSlashCommand({ name: "any-cmd" }, [], "claude")).not.toThrow();
   });
 
   test("allows command that IS in the advertised list", () => {
     expect(() =>
       validateSlashCommand(
         { name: "create_plan", input: "build feature X" },
-        [
-          { name: "create_plan", description: "Create a plan" },
-          { name: "research_codebase" },
-        ],
+        [{ name: "create_plan", description: "Create a plan" }, { name: "research_codebase" }],
         "claude",
       ),
     ).not.toThrow();
   });
 
   test("no-ops when command is undefined (no slash command in request)", () => {
-    expect(() =>
-      validateSlashCommand(
-        undefined,
-        [{ name: "create_plan", description: "Create a plan" }],
-        "claude",
-      ),
-    ).not.toThrow();
+    expect(() => validateSlashCommand(undefined, [{ name: "create_plan", description: "Create a plan" }], "claude")).not.toThrow();
   });
 });

@@ -6,17 +6,23 @@ export interface IConvertedPrompt {
   readonly warnings: readonly SharedV3Warning[];
 }
 
-const extractText = (parts: ReadonlyArray<{ type: string; text?: string }>): string => {
-  return parts
-    .filter((part) => part.type === "text" && typeof part.text === "string")
-    .map((part) => part.text ?? "")
-    .join("");
+const extractText = (parts: ReadonlyArray<{ type: string; text?: string }>, droppedTypes: Set<string>): string => {
+  const out: string[] = [];
+  for (const part of parts) {
+    if (part.type === "text" && typeof part.text === "string") {
+      out.push(part.text);
+    } else if (part.type !== "text") {
+      droppedTypes.add(part.type);
+    }
+  }
+  return out.join("");
 };
 
 export const promptToText = (prompt: LanguageModelV3Prompt): IConvertedPrompt => {
   const systemSegments: string[] = [];
   const userSegments: string[] = [];
   const warnings: SharedV3Warning[] = [];
+  const droppedPartTypes = new Set<string>();
 
   for (const message of prompt) {
     switch (message.role) {
@@ -27,11 +33,18 @@ export const promptToText = (prompt: LanguageModelV3Prompt): IConvertedPrompt =>
         break;
       }
       case "user": {
-        userSegments.push(extractText(message.content));
+        // Guard against an all-non-text user message producing an empty
+        // segment that joins as a blank paragraph. The dropped-parts
+        // warning still fires (extractText accumulated into
+        // droppedPartTypes), but we don't ship a blank turn to the agent.
+        const text = extractText(message.content, droppedPartTypes);
+        if (text.length > 0) {
+          userSegments.push(text);
+        }
         break;
       }
       case "assistant": {
-        const text = extractText(message.content);
+        const text = extractText(message.content, droppedPartTypes);
         if (text.length > 0) {
           userSegments.push(`[assistant said previously] ${text}`);
           warnings.push({
@@ -50,6 +63,15 @@ export const promptToText = (prompt: LanguageModelV3Prompt): IConvertedPrompt =>
         break;
       }
     }
+  }
+
+  if (droppedPartTypes.size > 0) {
+    // Surface lost non-text parts (image/file/etc.) so vision-prompt callers
+    // notice their attachments never made it onto the wire.
+    warnings.push({
+      type: "other",
+      message: `Non-text prompt parts dropped: ${[...droppedPartTypes].sort().join(", ")}. agents-wire only forwards text content over ACP today.`,
+    });
   }
 
   return {

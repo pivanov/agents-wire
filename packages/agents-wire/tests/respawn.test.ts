@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { computeBackoffMs, createSession, type ISessionOptionsInternal } from "@/api/session";
 import { MAX_RESPAWN_ATTEMPTS, RESPAWN_BACKOFF_MS } from "@/constants";
-import { AgentConnectionClosedError, WireError, isTransientError } from "@/errors";
+import { AgentConnectionClosedError, isTransientError, WireError } from "@/errors";
 import { createAsyncQueue } from "@/internal/async-queue";
 import type { IHostStream, IWireHost } from "@/runtime/host";
 import { connectMockHost } from "@/testing/mock-host";
 import type { TAgentId } from "@/types/agent";
 import type { TAgentEvent } from "@/types/events";
 import type { ISessionOptions } from "@/types/options";
-
 
 describe("respawn constants", () => {
   test("RESPAWN_BACKOFF_MS has 3 entries with expected values", () => {
@@ -19,7 +18,6 @@ describe("respawn constants", () => {
     expect(MAX_RESPAWN_ATTEMPTS).toBe(3);
   });
 });
-
 
 describe("computeBackoffMs", () => {
   test("attempt 1 returns 500ms", () => {
@@ -41,11 +39,15 @@ describe("computeBackoffMs", () => {
   test("backoff values are strictly non-decreasing", () => {
     const values = [1, 2, 3, 4].map(computeBackoffMs);
     for (let i = 1; i < values.length; i++) {
-      expect(values[i]).toBeGreaterThanOrEqual(values[i - 1]!);
+      const prev = values[i - 1];
+      const curr = values[i];
+      if (prev === undefined || curr === undefined) {
+        throw new Error("unexpected undefined backoff");
+      }
+      expect(curr).toBeGreaterThanOrEqual(prev);
     }
   });
 });
-
 
 describe("isTransientError", () => {
   test("AgentConnectionClosedError is transient", () => {
@@ -107,7 +109,7 @@ const buildFailingHost = (): IWireHost => {
     },
     cancel: async () => {},
     close: async () => {},
-    listSessions: async () => ({ sessions: [], nextCursor: undefined }),
+    listSessions: async () => ({ sessions: [] }),
     streamAllSessions: async function* () {},
     getModeState: () => undefined,
     setMode: async () => {},

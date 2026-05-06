@@ -32,10 +32,13 @@ export const createAsyncQueue = <T>(options: IAsyncQueueOptions = {}): IAsyncQue
       if (!consumer) {
         continue;
       }
-      if (errorSignal) {
-        consumer.reject(errorSignal.reason);
-      } else if (buffer.length > 0) {
+      // Buffered items take precedence over a pending error/end so a
+      // late-arriving overflow / fail() / end() doesn't strand items the
+      // producer already pushed.
+      if (buffer.length > 0) {
         consumer.resolve({ value: buffer.shift() as T, done: false });
+      } else if (errorSignal) {
+        consumer.reject(errorSignal.reason);
       } else if (endSignal) {
         consumer.resolve({ value: undefined as never, done: true });
       } else {
@@ -49,10 +52,15 @@ export const createAsyncQueue = <T>(options: IAsyncQueueOptions = {}): IAsyncQue
     if (endSignal || errorSignal) {
       return;
     }
-    if (buffer.length >= maxBuffer && consumers.length === 0) {
+    // Overflow check is consumer-count agnostic. The previous
+    // `consumers.length === 0` guard let a re-entrant push from inside a
+    // consumer callback bypass the cap (because at that moment a consumer
+    // is mid-resolve and the count is non-zero). The cap is the only
+    // backpressure mechanism — enforce it unconditionally.
+    if (buffer.length >= maxBuffer) {
       const overflow = new WireError(
         "stream-error",
-        `Async queue overflow: producer pushed > ${maxBuffer} items without a consumer. Increase maxBuffer or apply backpressure upstream.`,
+        `Async queue overflow: producer pushed > ${maxBuffer} items. Increase maxBuffer or apply backpressure upstream.`,
       );
       errorSignal = { reason: overflow };
       drainConsumers();
@@ -76,11 +84,13 @@ export const createAsyncQueue = <T>(options: IAsyncQueueOptions = {}): IAsyncQue
   };
 
   const next = (): Promise<IteratorResult<T>> => {
-    if (errorSignal) {
-      return Promise.reject(errorSignal.reason);
-    }
+    // Drain buffer before reporting error/end so already-buffered items aren't
+    // lost when fail()/end() lands while items are still queued.
     if (buffer.length > 0) {
       return Promise.resolve({ value: buffer.shift() as T, done: false });
+    }
+    if (errorSignal) {
+      return Promise.reject(errorSignal.reason);
     }
     if (endSignal) {
       return Promise.resolve({ value: undefined as never, done: true });

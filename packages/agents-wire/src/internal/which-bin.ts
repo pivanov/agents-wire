@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 /**
@@ -25,11 +25,14 @@ export const whichBin = (name: string): string | undefined => {
     for (const ext of exts) {
       const candidate = join(dir, name + ext);
       try {
-        if (existsSync(candidate) && statSync(candidate).isFile()) {
+        // Single statSync collapses the existsSync→statSync TOCTOU window:
+        // a symlink swap between the two checks is no longer a race in
+        // shared writable PATH dirs. ENOENT / EACCES throw and we skip.
+        if (statSync(candidate).isFile()) {
           return candidate;
         }
       } catch {
-        /* skip unreadable entry */
+        /* skip unreadable / missing entry */
       }
     }
   }

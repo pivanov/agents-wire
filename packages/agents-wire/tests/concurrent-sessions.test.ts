@@ -4,8 +4,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { connectMockHost } from "@/testing/mock-host";
 import { WireError } from "@/errors";
+import { connectMockHost } from "@/testing/mock-host";
 
 describe("concurrent sessions", () => {
   test("two sessions created on the same host get distinct session IDs", async () => {
@@ -25,11 +25,15 @@ describe("concurrent sessions", () => {
     const sessionB = await ctx.host.newSession();
 
     const streamA = ctx.host.prompt(sessionA, { prompt: "a" });
-    for await (const _ of streamA) { /* drain */ }
+    for await (const _ of streamA) {
+      /* drain */
+    }
     const resultA = await streamA.completion;
 
     const streamB = ctx.host.prompt(sessionB, { prompt: "b" });
-    for await (const _ of streamB) { /* drain */ }
+    for await (const _ of streamB) {
+      /* drain */
+    }
     const resultB = await streamB.completion;
 
     expect(resultA.text).toContain(sessionA);
@@ -61,7 +65,9 @@ describe("concurrent sessions", () => {
     }
 
     unblockPrompt?.();
-    for await (const _ of streamA) { /* drain */ }
+    for await (const _ of streamA) {
+      /* drain */
+    }
 
     expect(caught).toBeInstanceOf(WireError);
     expect((caught as WireError).code).toBe("stream-error");
@@ -77,7 +83,9 @@ describe("concurrent sessions", () => {
     const sessionB = await ctx.host.newSession();
 
     const streamA = ctx.host.prompt(sessionA, { prompt: "a" });
-    for await (const _ of streamA) { /* drain */ }
+    for await (const _ of streamA) {
+      /* drain */
+    }
     await streamA.completion;
 
     const streamB = ctx.host.prompt(sessionB, { prompt: "b" });
@@ -101,7 +109,9 @@ describe("concurrent sessions", () => {
 
     for (let i = 0; i < 3; i++) {
       const stream = ctx.host.prompt(sessionId, { prompt: `turn-${i}` });
-      for await (const _ of stream) { /* drain */ }
+      for await (const _ of stream) {
+        /* drain */
+      }
       const result = await stream.completion;
       expect(result.stopReason).toBe("end_turn");
     }

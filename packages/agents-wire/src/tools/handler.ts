@@ -52,8 +52,15 @@ export const createToolHandler = (handler?: IToolHandler): IToolHandlerInstance 
       return normalizeDecision(raw);
     } catch (cause) {
       if (errorFallback) {
-        const recovery = await errorFallback(cause, event);
-        return normalizeDecision(recovery);
+        try {
+          const recovery = await errorFallback(cause, event);
+          return normalizeDecision(recovery);
+        } catch {
+          // The user's error fallback itself threw — fall through to a
+          // safe deny rather than letting an unhandled rejection trip
+          // the stream.
+          return { decision: "deny", reason: "onToolUse and onError both threw" };
+        }
       }
       return { decision: "deny", reason: "onToolUse threw" };
     }

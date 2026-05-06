@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { listAuggieModels, listCursorModels, listKiloModels, listOpencodeModels, parseAuggieModels, parseCursorModels, parseKiloModels, parseOpencodeModels } from "@/internal/list-models";
 import { cursor } from "@/catalog/cursor";
 import { opencode } from "@/catalog/opencode";
+import {
+  listAuggieModels,
+  listCursorModels,
+  listKiloModels,
+  listOpencodeModels,
+  parseAuggieModels,
+  parseCursorModels,
+  parseKiloModels,
+  parseOpencodeModels,
+} from "@/internal/list-models";
 
 describe("parseCursorModels", () => {
   test("parses live cursor-agent --list-models output", () => {

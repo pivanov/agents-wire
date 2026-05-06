@@ -40,7 +40,31 @@ export const definitionFor = (id: TAgentId): IAgentDefinition => {
   if (custom) {
     return custom;
   }
+  // Try alias resolution before bailing out so consumers calling
+  // `definitionFor("claude-code")` reach Claude instead of failing.
+  const aliased = resolveAgentAlias(id);
+  if (aliased && aliased !== id) {
+    return definitionFor(aliased);
+  }
   throw new Error(`Unknown agent "${id}". Built-ins: ${Object.keys(REGISTRY).join(", ")}`);
+};
+
+/**
+ * Resolve a freeform input (e.g. `"claude-code"`, `"gpt-5"`) to a canonical
+ * agent id by checking `aliases` on every definition. Returns `null` if no
+ * match — callers can then surface a friendlier error than `definitionFor`'s
+ * throw path. Exact id matches short-circuit immediately.
+ */
+export const resolveAgentAlias = (input: string): TAgentId | null => {
+  if (REGISTRY[input as TBuiltInAgentId] || customRegistry.has(input)) {
+    return input;
+  }
+  for (const def of [...Object.values(REGISTRY), ...customRegistry.values()]) {
+    if (def.aliases?.includes(input)) {
+      return def.id;
+    }
+  }
+  return null;
 };
 
 export const registerDefinition = (definition: IAgentDefinition): void => {

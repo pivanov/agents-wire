@@ -100,8 +100,6 @@ export interface IAgentOptions {
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly envFilter?: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
-  /** Pass the host's full process.env to the agent. Default false (allowlist + `env`). */
-  readonly passFullEnv?: boolean;
   readonly additionalDirectories?: readonly string[];
 
   readonly systemPrompt?: string;

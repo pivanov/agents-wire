@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { agents } from "@/api/agents";
 import { definitionFor, listDefinitions } from "@/catalog/index";
+import { PACKAGE_VERSION } from "@/constants";
 import { isKnownError } from "@/errors";
 import type { TAgentId } from "@/types/agent";
 import type { IAskOptions } from "@/types/options";
@@ -116,9 +117,12 @@ const printHelp = (): void => {
   process.stdout.write(`${usage}\n`);
 };
 
-const printVersion = async (): Promise<void> => {
-  const manifest = await import("../package.json", { with: { type: "json" } });
-  process.stdout.write(`${(manifest as { default: { version: string } }).default.version}\n`);
+const printVersion = (): void => {
+  // PACKAGE_VERSION is build-baked from package.json#version via tsup
+  // `define`. Avoids the dynamic import that would fail under Node
+  // versions without import-attribute support and that resolves
+  // unpredictably when the bin is symlinked into a global root.
+  process.stdout.write(`${PACKAGE_VERSION}\n`);
 };
 
 const readStdin = async (): Promise<string> => {
@@ -251,7 +255,7 @@ const main = async (): Promise<number> => {
     return 0;
   }
   if (parsed.flags["--version"]) {
-    await printVersion();
+    printVersion();
     return 0;
   }
   switch (parsed.command) {
@@ -274,7 +278,7 @@ const main = async (): Promise<number> => {
       printHelp();
       return 0;
     case "version":
-      await printVersion();
+      printVersion();
       return 0;
     default:
       printHelp();
@@ -282,15 +286,26 @@ const main = async (): Promise<number> => {
   }
 };
 
+// Surface stack traces when AGENTS_WIRE_DEBUG=1 — debugging cli failures
+// without a stack is needlessly hard. Default stays terse for end users.
+const includeStack = process.env.AGENTS_WIRE_DEBUG === "1";
+
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
     if (isKnownError(error)) {
-      process.stderr.write(`${JSON.stringify({ error: error.message, code: error.code, agent: error.agent })}\n`);
+      const payload: Record<string, unknown> = { error: error.message, code: error.code, agent: error.agent };
+      if (includeStack && error.stack) {
+        payload.stack = error.stack;
+      }
+      process.stderr.write(`${JSON.stringify(payload)}\n`);
       process.exit(2);
     }
     if (error instanceof Error) {
       process.stderr.write(`${error.message}\n`);
+      if (includeStack && error.stack) {
+        process.stderr.write(`${error.stack}\n`);
+      }
       process.exit(1);
     }
     process.stderr.write(`${String(error)}\n`);

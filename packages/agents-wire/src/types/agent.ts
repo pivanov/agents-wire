@@ -113,6 +113,13 @@ export interface IAgentDefinition {
    */
   readonly acpCompatible?: boolean;
   /**
+   * Set to `true` for agents that consume the `systemPrompt` field of an ACP
+   * `prompt` request natively (Claude does this via its `system` field). For
+   * everyone else the host has to prepend the system prompt to the user
+   * message because ACP `prompt` doesn't carry a separate system slot.
+   */
+  readonly nativeSystemPrompt?: boolean;
+  /**
    * Selectable models. Empty / omitted means the agent picks its own
    * default and exposes no choice. UI surfaces (pickers) read this
    * declaratively so they stay generic across agents.
@@ -125,6 +132,25 @@ export interface IAgentDefinition {
    * and fall back to the static `models` field.
    */
   readonly listAvailableModels?: () => Promise<readonly IAgentModelOption[]>;
+  /**
+   * Cheap synchronous pre-check. If supplied and returns `false`, `detect`
+   * skips the (subprocess-spawning) `probe` and returns unavailable.
+   * Typical use: `existsSync(<config dir>)` to filter false-positives like
+   * a generic "agent" binary on PATH belonging to an unrelated tool.
+   */
+  readonly quickCheck?: () => boolean;
+  /**
+   * Config dirs from prior product names. Surfaces in detection output so
+   * a user with a legacy install of the same agent under an old name still
+   * shows as available.
+   */
+  readonly legacyDirs?: readonly string[];
+  /**
+   * Alternative ids users might pass (e.g. "claude-code" → "claude",
+   * "gpt-5" → "codex"). Resolved by `resolveAgentAlias` and consulted by
+   * the AI SDK provider so common misspellings don't throw.
+   */
+  readonly aliases?: readonly string[];
 }
 
 export interface IAgentAdapter {

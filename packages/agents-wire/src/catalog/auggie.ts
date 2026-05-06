@@ -13,6 +13,7 @@ export const auggie: IAgentDefinition = {
   // the user is logged in. Auggie's CLI gates the model list behind auth,
   // so logged-out users see only "Default" until they sign in.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["augment", "augmentcode"],
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "auggie",

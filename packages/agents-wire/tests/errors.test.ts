@@ -23,7 +23,6 @@ import {
   WireError,
 } from "@/errors";
 
-
 describe("WireError", () => {
   test("sets code and message", () => {
     const err = new WireError("stream-error", "test message");
@@ -44,7 +43,6 @@ describe("WireError", () => {
     expect(new WireError("abort", "x")).toBeInstanceOf(Error);
   });
 });
-
 
 describe("BudgetExceededError", () => {
   test("code is budget-exceeded", () => {
@@ -73,7 +71,6 @@ describe("BudgetExceededError", () => {
   });
 });
 
-
 describe("AgentInactivityError", () => {
   test("code is inactivity-timeout", () => {
     const err = new AgentInactivityError("claude", "sess-1", 30_000);
@@ -95,7 +92,6 @@ describe("AgentInactivityError", () => {
   });
 });
 
-
 describe("AgentInitTimeoutError", () => {
   test("code is init-timeout", () => {
     const err = new AgentInitTimeoutError("claude", 30_000);
@@ -111,7 +107,6 @@ describe("AgentInitTimeoutError", () => {
     expect(new AgentInitTimeoutError("claude", 1).name).toBe("AgentInitTimeoutError");
   });
 });
-
 
 describe("AgentUnauthenticatedError", () => {
   test("code is auth-required", () => {
@@ -134,7 +129,6 @@ describe("AgentUnauthenticatedError", () => {
   });
 });
 
-
 describe("AgentUsageLimitError", () => {
   test("code is usage-limit", () => {
     const err = new AgentUsageLimitError("claude", "Quota exceeded");
@@ -150,7 +144,6 @@ describe("AgentUsageLimitError", () => {
     expect(new AgentUsageLimitError("claude", "x").name).toBe("AgentUsageLimitError");
   });
 });
-
 
 describe("ProtocolVersionMismatchError", () => {
   test("code is protocol-mismatch", () => {
@@ -169,7 +162,6 @@ describe("ProtocolVersionMismatchError", () => {
   });
 });
 
-
 describe("CapabilityNotSupportedError", () => {
   test("code is capability-not-supported", () => {
     const err = new CapabilityNotSupportedError("claude", "sessionCapabilities.list");
@@ -181,7 +173,6 @@ describe("CapabilityNotSupportedError", () => {
     expect(err.capability).toBe("mcpCapabilities.http");
   });
 });
-
 
 describe("AgentConnectionClosedError", () => {
   test("code is connection-closed", () => {
@@ -206,7 +197,6 @@ describe("AgentConnectionClosedError", () => {
   });
 });
 
-
 describe("AgentNotInstalledError", () => {
   test("code is agent-not-installed", () => {
     const err = new AgentNotInstalledError("cursor", "Install cursor first");
@@ -219,7 +209,6 @@ describe("AgentNotInstalledError", () => {
   });
 });
 
-
 describe("AbortError", () => {
   test("code is abort", () => {
     expect(new AbortError().code).toBe("abort");
@@ -229,7 +218,6 @@ describe("AbortError", () => {
     expect(new AbortError().message).toBe("Operation aborted");
   });
 });
-
 
 describe("JsonValidationError", () => {
   test("code is json-validation", () => {
@@ -244,7 +232,6 @@ describe("JsonValidationError", () => {
     expect(err.issues).toEqual(issues);
   });
 });
-
 
 describe("isKnownError", () => {
   test("returns true for WireError", () => {
@@ -271,7 +258,6 @@ describe("isKnownError", () => {
     expect(isKnownError(null)).toBe(false);
   });
 });
-
 
 describe("isTransientError", () => {
   test("connection-closed WireError is transient", () => {
@@ -303,7 +289,6 @@ describe("isTransientError", () => {
   });
 });
 
-
 describe("errorMessage", () => {
   test("returns message for Error", () => {
     expect(errorMessage(new Error("boom"))).toBe("boom");
@@ -320,12 +305,11 @@ describe("errorMessage", () => {
   test("falls back to String() for non-serializable", () => {
     // Circular object is not serializable - falls back to String()
     const obj: Record<string, unknown> = {};
-    obj["self"] = obj;
+    obj.self = obj;
     const msg = errorMessage(obj);
     expect(typeof msg).toBe("string");
   });
 });
-
 
 describe("KNOWN_ERROR_CODES", () => {
   test("includes expected codes", () => {

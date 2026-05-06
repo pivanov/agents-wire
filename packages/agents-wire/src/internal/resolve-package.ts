@@ -4,19 +4,11 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 
-// Build a require() rooted at THIS module at runtime. We can't use
-// `createRequire(import.meta.url)` directly because Bun's bundler inlines
-// `import.meta.url` to the absolute SOURCE-file path at build time when
-// emitting CJS — that leaks the maintainer's local filesystem layout into
-// the published artifact and makes the require chain resolve from a path
-// that doesn't exist on the consumer's machine.
-//
-// Strategy: prefer the live `require` when it exists (CJS runtime provides
-// one rooted at the dist file), otherwise build one from import.meta.url
-// (ESM runtime — Bun keeps that dynamic). The `typeof require` check stops
-// Bun from constant-folding the ESM branch into CJS output.
-declare const require: NodeRequire | undefined;
-const localRequire: NodeRequire = typeof require === "function" ? require : createRequire(import.meta.url);
+// Build a require() rooted at THIS module at runtime. tsup's `shims: true`
+// polyfills `import.meta.url` in CJS via `pathToFileURL(__filename)`, so this
+// single line works in both ESM and CJS bundles. Avoid `typeof require` —
+// tsup rewrites bare `require` in ESM into a broken Proxy shim.
+const localRequire = createRequire(import.meta.url);
 
 // Probe candidate directories for the npm "global" root the user
 // installed packages into. Order matters: explicit env override
@@ -127,8 +119,7 @@ const verifyResolvedPackage = (resolved: string, specifier: string): boolean => 
   return false;
 };
 
-const resolveFromGlobal = (specifier: string): string => {
-  const roots = getGlobalRoots();
+const tryResolveFromRoots = (roots: readonly string[], specifier: string): string | undefined => {
   for (const root of roots) {
     try {
       const fromGlobal = createRequire(path.join(root, "_"));
@@ -139,6 +130,22 @@ const resolveFromGlobal = (specifier: string): string => {
     } catch {
       /* try next root */
     }
+  }
+  return undefined;
+};
+
+const resolveFromGlobal = (specifier: string): string => {
+  const cached = tryResolveFromRoots(getGlobalRoots(), specifier);
+  if (cached) {
+    return cached;
+  }
+  // The cached global root may be stale (e.g. user just ran `npm i -g`
+  // after we resolved the previous root). Invalidate and retry once
+  // before declaring defeat.
+  cachedGlobalRoot = undefined;
+  const fresh = tryResolveFromRoots(getGlobalRoots(), specifier);
+  if (fresh) {
+    return fresh;
   }
   throw new Error(`global package not found: ${specifier}`);
 };

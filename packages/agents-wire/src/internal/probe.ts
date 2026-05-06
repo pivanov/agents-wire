@@ -18,25 +18,33 @@ export const probeBinaryVersion = (binary: string, timeoutMs: number = PROBE_TIM
     }
     let settled = false;
     let killEscalation: ReturnType<typeof setTimeout> | undefined;
-    const finish = (available: boolean, reason?: string): void => {
+    // `kill` controls whether finish() proactively SIGTERMs and arms a SIGKILL
+    // escalation timer. False on the natural-exit path so we don't pin the
+    // event loop open for KILL_GRACE_MS waiting to kill an already-dead pid.
+    const finish = (available: boolean, reason?: string, kill: boolean = true): void => {
       if (settled) {
         return;
       }
       settled = true;
-      try {
-        spawned.kill(); // SIGTERM
-      } catch {
-        /* swallow */
-      }
-      // If the binary traps SIGTERM, escalate to SIGKILL so we don't leak
-      // a zombie process for the lifetime of the SDK host.
-      killEscalation = setTimeout(() => {
+      if (kill) {
         try {
-          spawned.kill("SIGKILL");
+          spawned.kill(); // SIGTERM
         } catch {
-          /* already exited */
+          /* swallow */
         }
-      }, KILL_GRACE_MS);
+        // If the binary traps SIGTERM, escalate to SIGKILL so we don't leak
+        // a zombie process for the lifetime of the SDK host.
+        killEscalation = setTimeout(() => {
+          try {
+            spawned.kill("SIGKILL");
+          } catch {
+            /* already exited */
+          }
+        }, KILL_GRACE_MS);
+        // Don't pin the event loop on the escalation timer alone — if the
+        // process exits cleanly under SIGTERM we still want Node to exit.
+        killEscalation.unref?.();
+      }
       resolve(reason !== undefined ? { available, reason } : { available });
     };
     const handle = setTimeout(() => finish(false, "timeout"), timeoutMs);
@@ -46,7 +54,7 @@ export const probeBinaryVersion = (binary: string, timeoutMs: number = PROBE_TIM
         clearTimeout(killEscalation);
       }
       const reason = cause.code === "ENOENT" ? `not found on PATH: ${binary}` : cause.message;
-      finish(false, reason);
+      finish(false, reason, false);
     });
     spawned.once("exit", (code) => {
       clearTimeout(handle);
@@ -54,10 +62,10 @@ export const probeBinaryVersion = (binary: string, timeoutMs: number = PROBE_TIM
         clearTimeout(killEscalation);
       }
       if (code === 0) {
-        finish(true);
+        finish(true, undefined, false);
         return;
       }
-      finish(false, `exit code ${code}`);
+      finish(false, `exit code ${code}`, false);
     });
   });
 

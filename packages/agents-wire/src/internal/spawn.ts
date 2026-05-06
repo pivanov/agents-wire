@@ -9,8 +9,6 @@ export interface ISpawnOptions {
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly envFilter?: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
-  /** Pass the host's full process.env to the child. Defaults to false (allowlist only). */
-  readonly passFullEnv?: boolean;
   readonly stderrTailLimit?: number;
   readonly disposeGraceMs?: number;
   readonly onStderr?: (line: string) => void;
@@ -19,55 +17,6 @@ export interface ISpawnOptions {
   /** Reasoning effort level forwarded to definition.launch() (agent-specific). */
   readonly effort?: string;
 }
-
-const SAFE_ENV_KEYS = new Set([
-  "PATH",
-  "HOME",
-  "USER",
-  "LOGNAME",
-  "SHELL",
-  "TMPDIR",
-  "TEMP",
-  "TMP",
-  "TERM",
-  "TERMINFO",
-  "TERM_PROGRAM",
-  "COLORTERM",
-  "NO_COLOR",
-  "FORCE_COLOR",
-  "LANG",
-  "LANGUAGE",
-  "PWD",
-  "OLDPWD",
-  "SystemRoot",
-  "ProgramFiles",
-  "APPDATA",
-  "LOCALAPPDATA",
-]);
-
-const SAFE_ENV_PREFIXES = ["LC_", "NODE_", "BUN_"] as const;
-
-const isSafeKey = (key: string): boolean => {
-  if (SAFE_ENV_KEYS.has(key)) {
-    return true;
-  }
-  for (const prefix of SAFE_ENV_PREFIXES) {
-    if (key.startsWith(prefix)) {
-      return true;
-    }
-  }
-  return false;
-};
-
-const filterToAllowlist = (parentEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
-  const next: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(parentEnv)) {
-    if (isSafeKey(key)) {
-      next[key] = value;
-    }
-  }
-  return next;
-};
 
 export interface ISpawnedConnection {
   readonly definition: IAgentDefinition;
@@ -120,8 +69,9 @@ export const launchAgent = async (definition: IAgentDefinition, options: ISpawnO
     ...(options.model ? { model: options.model } : {}),
     ...(options.effort ? { effort: options.effort } : {}),
   });
-  const baseEnv = options.passFullEnv ? process.env : filterToAllowlist(process.env);
-  const merged = buildEnv(baseEnv, { ...launchSpec.env, ...options.env });
+  // Catalog-mandated env (launchSpec.env) wins over caller env so flags like
+  // AUGMENT_DISABLE_AUTO_UPDATE can't be silently nuked by user-supplied env.
+  const merged = buildEnv(process.env, { ...options.env, ...launchSpec.env });
   const env = options.envFilter ? options.envFilter(merged) : merged;
   const child = spawn(launchSpec.command, [...launchSpec.args], {
     cwd: options.cwd ?? process.cwd(),
@@ -134,7 +84,19 @@ export const launchAgent = async (definition: IAgentDefinition, options: ISpawnO
   wireStderr(child, tail, stderrLimit, options.onStderr);
 
   const closed = new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolveClosed) => {
-    child.once("exit", (code, signal) => resolveClosed({ exitCode: code, signal }));
+    let settled = false;
+    const settle = (code: number | null, signal: NodeJS.Signals | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolveClosed({ exitCode: code, signal });
+    };
+    child.once("exit", (code, signal) => settle(code, signal));
+    // Backstop: if the child emits `error` after spawn (EPIPE, ECHILD,
+    // OS-level reclaim) without firing `exit`, resolve the closed promise
+    // anyway so dispose() / await connection.closed cannot hang forever.
+    child.once("error", () => settle(null, null));
   });
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -173,16 +135,22 @@ export const launchAgent = async (definition: IAgentDefinition, options: ISpawnO
     if (!settled) {
       child.kill("SIGTERM");
       let timeout2: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([
-        closed,
-        new Promise<void>((settle) => {
-          timeout2 = setTimeout(settle, grace);
+      // Mirror the first race's boolean-result pattern so we can tell
+      // "closed naturally" (true) from "second timeout elapsed" (false).
+      // The previous code threw away the result and relied on a follow-up
+      // exitCode/signalCode check that races with Node's exit-event
+      // processing on slow platforms — sending duplicate SIGKILL after
+      // the child already exited cleanly.
+      const secondSettled = await Promise.race([
+        closed.then(() => true),
+        new Promise<boolean>((settle) => {
+          timeout2 = setTimeout(() => settle(false), grace);
         }),
       ]);
       if (timeout2) {
         clearTimeout(timeout2);
       }
-      if (child.exitCode === null && child.signalCode === null) {
+      if (!secondSettled && child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
     }

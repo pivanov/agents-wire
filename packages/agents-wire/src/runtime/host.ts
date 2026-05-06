@@ -16,6 +16,7 @@ import {
 import {
   ACP_PROTOCOL_VERSION,
   AUTH_FAILURE_PATTERNS,
+  CANCEL_DEADLINE_MS,
   DEFAULT_INACTIVITY_TIMEOUT_MS,
   DEFAULT_INITIALIZE_TIMEOUT_MS,
   PACKAGE_NAME,
@@ -164,6 +165,7 @@ const buildPromptBlocks = (
   command: ISlashCommand | undefined,
   agentId: TAgentId,
   availableCommands: readonly IAvailableCommand[] | undefined,
+  nativeSystemPrompt: boolean,
 ): ContentBlock[] => {
   validateSlashCommand(command, availableCommands, agentId);
   const blocks = toContentBlocks(prompt);
@@ -176,7 +178,7 @@ const buildPromptBlocks = (
       blocks.unshift({ type: "text", text: commandText });
     }
   }
-  if (systemPrompt && agentId !== "claude") {
+  if (systemPrompt && !nativeSystemPrompt) {
     if (blocks.length > 0 && blocks[0]?.type === "text") {
       const firstBlock = blocks[0];
       blocks.splice(0, 1, { type: "text", text: `${systemPrompt}\n\n${firstBlock.text}` });
@@ -291,6 +293,8 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
   const policyResolver = policyToResolver(options.permission);
   const toolGate = createToolHandler(options.toolHandler);
 
+  let rewriteInputWarned = false;
+
   const drainPendingPermissions = (active: IActiveStream): void => {
     for (const settle of [...active.pendingPermissionCancels]) {
       settle();
@@ -320,6 +324,16 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
           return { outcome: { outcome: "selected", optionId: reject.optionId } };
         }
         return { outcome: { outcome: "cancelled" } };
+      }
+      if (decision.decision === "rewrite-input" && !rewriteInputWarned) {
+        // ACP RequestPermissionResponse has no input-rewrite outcome — the
+        // rewrite is applied locally to the tool-use event log only and the
+        // *original* input still flows to the agent. Surface this once so a
+        // user wiring up a sanitizer notices their rewrite isn't enforced.
+        rewriteInputWarned = true;
+        options.onWarning?.(
+          `Tool decision "rewrite-input" is not enforceable over ACP — the original input flows to the agent unchanged. Use "deny" + a follow-up prompt edit instead.`,
+        );
       }
     }
     if (!record?.active || options.permission !== "stream") {
@@ -386,6 +400,16 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
       record.availableCommands = toAvailableCommands(update.availableCommands);
     }
     if (update.sessionUpdate === "current_mode_update" && record.modeState) {
+      // Dedupe: setMode() pushes a mode-changed event eagerly when its
+      // RPC returns. Some agents also acknowledge by sending a
+      // current_mode_update notification immediately after — without
+      // this guard the consumer would observe the same logical change
+      // twice. Skip the translate() push when the modeId already matches
+      // what we last applied.
+      if (record.modeState.currentModeId === update.currentModeId) {
+        record.modeState = { ...record.modeState, currentModeId: update.currentModeId };
+        return;
+      }
       record.modeState = { ...record.modeState, currentModeId: update.currentModeId };
     }
     translate(update, {
@@ -437,7 +461,6 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
       ...(options.cwd ? { cwd: options.cwd } : {}),
       ...(options.env ? { env: options.env } : {}),
       ...(options.envFilter ? { envFilter: options.envFilter } : {}),
-      ...(options.passFullEnv ? { passFullEnv: options.passFullEnv } : {}),
       onStderr: wrappedOnStderr,
       ...(options.model ? { model: options.model } : {}),
       ...(effortValue ? { effort: effortValue } : {}),
@@ -461,6 +484,12 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
 
   const acp = new ClientSideConnection(() => clientHandlers, connection.stream);
 
+  // Enable stderr-fatal classification BEFORE acp.initialize so that
+  // auth/usage-limit failures emitted on stderr during the handshake set
+  // fatalError and become AgentUnauthenticatedError / AgentUsageLimitError
+  // instead of being swallowed as a generic init-failed / init-timeout.
+  stderrFatalEnabled = true;
+
   const initializeTimeoutMs = options.initializeTimeoutMs ?? DEFAULT_INITIALIZE_TIMEOUT_MS;
   let initializeResponse: Awaited<ReturnType<typeof acp.initialize>>;
   try {
@@ -475,6 +504,11 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     );
   } catch (cause) {
     await connection.dispose();
+    // Prefer the stderr-classified fatal (auth/usage) over a generic
+    // init-failed wrapper — the underlying root cause is more actionable.
+    if (fatalError) {
+      throw fatalError;
+    }
     if (cause instanceof WireError) {
       throw cause;
     }
@@ -490,23 +524,30 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     throw new ProtocolVersionMismatchError(definition.id, ACP_PROTOCOL_VERSION, agentProto);
   }
 
-  stderrFatalEnabled = true;
-
   const capabilities = deriveCapabilities(initializeResponse.agentCapabilities ?? {});
   const authMethods: readonly AuthMethod[] = initializeResponse.authMethods ?? [];
 
   let closed = false;
   void connection.closed.then((exit) => {
-    if (closed) {
-      return;
-    }
-    const error = new AgentConnectionClosedError(definition.id, exit.exitCode, exit.signal, connection?.stderrTail() ?? []);
-    for (const record of sessions.values()) {
-      if (record.active) {
-        failActive(record.active, error);
+    try {
+      if (closed) {
+        return;
       }
+      // Set the flag BEFORE invoking failActive — consumer hooks inside it
+      // can throw, and we don't want other gates seeing closed=false after
+      // the connection is gone.
+      closed = true;
+      const error = new AgentConnectionClosedError(definition.id, exit.exitCode, exit.signal, connection?.stderrTail() ?? []);
+      for (const record of sessions.values()) {
+        if (record.active) {
+          failActive(record.active, error);
+        }
+      }
+    } catch (cause) {
+      // Surface consumer-callback errors via onWarning rather than swallow —
+      // genuine bugs in failActive shouldn't be invisible.
+      options.onWarning?.(`session-fail handler threw: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
-    closed = true;
   });
 
   const validateMcpServers = (servers: readonly IMcpServer[]): void => {
@@ -544,11 +585,26 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     //
     // Each call is best-effort: agents without setSessionConfigOption
     // return -32601 (Method not found), which we swallow.
+    // Register the session locally BEFORE applying preferences. If any
+    // setSessionConfigOption hangs or close() runs mid-call, we still know
+    // the agent-side session exists so we can clean it up rather than
+    // leaking it forever.
+    sessions.set(sessionId, {
+      id: sessionId,
+      cwd,
+      mcpServers,
+      modeState: response.modes ?? undefined,
+      configOptions: response.configOptions && response.configOptions.length > 0 ? response.configOptions : undefined,
+      availableCommands: undefined,
+      active: undefined,
+    });
+
     const prefs: { configId: string; value: string | boolean }[] = [];
     if (options.model) {
       const declaredConfigOptions = response.configOptions ?? [];
       const modelOpt = declaredConfigOptions.find(
-        (o) => o.type === "select" && (o.category === "model" || o.id === "model" || /(^|_)model($|_)/i.test(o.id)),
+        // M2 fix: also match hyphenated variants (e.g. "code-model-v2").
+        (o) => o.type === "select" && (o.category === "model" || o.id === "model" || /(^|[_-])model([_-]|$)/i.test(o.id)),
       );
       const modelConfigId = modelOpt?.id ?? "model";
       prefs.push({ configId: modelConfigId, value: options.model });
@@ -578,15 +634,6 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
         });
       }
     }
-    sessions.set(sessionId, {
-      id: sessionId,
-      cwd,
-      mcpServers,
-      modeState: response.modes ?? undefined,
-      configOptions: response.configOptions && response.configOptions.length > 0 ? response.configOptions : undefined,
-      availableCommands: undefined,
-      active: undefined,
-    });
     return sessionId;
   };
 
@@ -650,18 +697,46 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     if (!record.active || record.active.cancelled) {
       return;
     }
-    record.active.cancelled = true;
-    if (record.active.inactivityTimer.handle) {
-      clearTimeout(record.active.inactivityTimer.handle);
+    const active = record.active;
+    active.cancelled = true;
+    // Backstop: if inactivityTimeoutMs <= 0 (consumer opted out), arm a
+    // dedicated cancel-deadline so a non-compliant agent that ignores
+    // acp.cancel can't hang the consumer forever. With inactivityTimeoutMs
+    // > 0, the inactivity timer is the backstop and we leave it running.
+    let cancelDeadline: ReturnType<typeof setTimeout> | undefined;
+    if (inactivityTimeoutMs <= 0) {
+      cancelDeadline = setTimeout(() => {
+        const err = new WireError("cancelled", `Session ${record.id} did not respond to cancel within ${CANCEL_DEADLINE_MS}ms`, {
+          agent: definition.id,
+        });
+        active.queue.fail(err);
+        active.forceFail?.(err);
+      }, CANCEL_DEADLINE_MS);
+      cancelDeadline.unref?.();
     }
     try {
       await acp.cancel({ sessionId: record.id });
-    } catch {
-      /* swallow cancel error */
+    } catch (cause) {
+      // Cancel-RPC failures are usually transient framing issues, but
+      // discarding them silently makes diagnosis impossible. Surface via
+      // the consumer's onWarning hook if one is set.
+      options.onWarning?.(`cancel RPC failed for session ${record.id}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      // RPC failed — no point waiting for the deadline.
+      if (cancelDeadline) {
+        clearTimeout(cancelDeadline);
+      }
     }
+    // NOTE: when acp.cancel succeeds we deliberately leave cancelDeadline
+    // armed (.unref()-ed). It only fires if the agent acknowledged cancel
+    // but never finishes the stream within CANCEL_DEADLINE_MS — exactly
+    // the hang scenario this backstop guards against. Idempotent fail/
+    // forceFail means a late firing on an already-settled stream is a no-op.
   };
 
   const prompt: IWireHost["prompt"] = (sessionId, input) => {
+    if (closed) {
+      throw new WireError("connection-closed", `Host for ${definition.id} is closed`, { agent: definition.id });
+    }
     if (fatalError) {
       throw fatalError;
     }
@@ -688,7 +763,14 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
 
     let promptBlocks: ContentBlock[];
     try {
-      promptBlocks = buildPromptBlocks(input.prompt, input.systemPrompt, input.command, definition.id, record.availableCommands);
+      promptBlocks = buildPromptBlocks(
+        input.prompt,
+        input.systemPrompt,
+        input.command,
+        definition.id,
+        record.availableCommands,
+        definition.nativeSystemPrompt === true,
+      );
     } catch (cause) {
       if (active.inactivityTimer.handle) {
         clearTimeout(active.inactivityTimer.handle);
@@ -701,6 +783,12 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     }
 
     if (input.signal?.aborted) {
+      // Clear the inactivity timer scheduled above — without this, a
+      // pre-aborted prompt pins one timer per call for the full
+      // inactivityTimeoutMs window even though the stream is already done.
+      if (active.inactivityTimer.handle) {
+        clearTimeout(active.inactivityTimer.handle);
+      }
       queue.push({ type: "finish", stopReason: "cancelled", usage: undefined, cost: undefined });
       queue.end();
       record.active = undefined;
@@ -724,15 +812,26 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
     let abortListener: (() => void) | undefined;
     const startedAt = clock();
 
+    // Wire forceFail / forceResolve BEFORE the IIFE — the previous shape
+    // ran the Promise<never> constructor inside the IIFE, which means a
+    // close() landing in the same tick (e.g. controller pre-aborted)
+    // could call failActive on an active whose forceFail was still
+    // undefined, falling back to the acp.prompt rejection path and
+    // mis-classifying the cancellation as stream-error.
+    let forceResolve: (() => void) | undefined;
+    const forcePromise = new Promise<never>((resolveForce, rejectForce) => {
+      // resolveForce typed as <never> via cast — Promise.race ignores
+      // the resolved value of a never-typed racer at runtime.
+      forceResolve = () => (resolveForce as unknown as () => void)();
+      active.forceFail = rejectForce;
+    });
+
     const completion = (async (): Promise<IAskResult> => {
       try {
         const promptPromise = acp.prompt({
           sessionId,
           prompt: promptBlocks,
           ...(input.meta ? { _meta: input.meta } : {}),
-        });
-        const forcePromise = new Promise<never>((_, rejectForce) => {
-          active.forceFail = rejectForce;
         });
         const response = await Promise.race([promptPromise, forcePromise]);
         const stopReason: TStopReason = response.stopReason ?? "end_turn";
@@ -779,6 +878,11 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
         queue.fail(wrapped);
         throw wrapped;
       } finally {
+        // Settle the dangling forcePromise so Promise.race releases its
+        // internal handler chain; otherwise the rejectForce closure
+        // (which captured `active`) stays reachable until the IIFE itself
+        // is GC'd.
+        forceResolve?.();
         if (active.inactivityTimer.handle) {
           clearTimeout(active.inactivityTimer.handle);
         }

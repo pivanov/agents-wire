@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["./packages/*/src/**/*.{ts,tsx}"]
+    "includes": ["./packages/*/src/**/*.{ts,tsx}", "./packages/*/tests/**/*.{ts,tsx}"]
   },
   "formatter": {
     "enabled": true,

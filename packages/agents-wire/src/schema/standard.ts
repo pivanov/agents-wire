@@ -1,6 +1,10 @@
+// Aligned with the Standard Schema v1 spec (https://standardschema.dev/).
+// PropertyKey covers string | number | symbol so Zod / Valibot / ArkType
+// schemas type-check as drop-in IStandardSchema instances.
+
 export interface IStandardSchemaIssue {
   readonly message: string;
-  readonly path?: ReadonlyArray<string | number | { readonly key: string | number }>;
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined;
 }
 
 export interface IStandardSchemaSuccess<T> {
@@ -14,21 +18,23 @@ export interface IStandardSchemaFailure {
 
 export type TStandardSchemaResult<T> = IStandardSchemaSuccess<T> | IStandardSchemaFailure;
 
-export interface IStandardSchema<T = unknown> {
+export interface IStandardSchema<Input = unknown, Output = Input> {
   readonly "~standard": {
     readonly version: 1;
     readonly vendor: string;
-    readonly validate: (value: unknown) => TStandardSchemaResult<T> | Promise<TStandardSchemaResult<T>>;
-    readonly types?: {
-      readonly input: unknown;
-      readonly output: T;
-    };
+    readonly validate: (value: unknown) => TStandardSchemaResult<Output> | Promise<TStandardSchemaResult<Output>>;
+    readonly types?:
+      | {
+          readonly input: Input;
+          readonly output: Output;
+        }
+      | undefined;
   };
 }
 
-export type TInferOutput<S> = S extends IStandardSchema<infer U> ? U : never;
+export type TInferOutput<S> = S extends IStandardSchema<infer _, infer U> ? U : never;
 
-export type TSchemaInput<T> = IStandardSchema<T> | string;
+export type TSchemaInput<T> = IStandardSchema<unknown, T> | string;
 
 export const isStandardSchema = (value: unknown): value is IStandardSchema => {
   if (!value || typeof value !== "object") {
@@ -39,5 +45,5 @@ export const isStandardSchema = (value: unknown): value is IStandardSchema => {
     return false;
   }
   const props = candidate["~standard"] as { version?: unknown; validate?: unknown; vendor?: unknown };
-  return props.version === 1 && typeof props.validate === "function" && typeof props.vendor === "string";
+  return props.version === 1 && typeof props.validate === "function" && typeof props.vendor === "string" && props.vendor.length > 0;
 };

@@ -201,7 +201,18 @@ export const connectMockHost = async (
   const { agentStream, clientStream } = makeInProcessStreamPair();
 
   const stderrTailLines: string[] = [];
+  // Idempotent settle so dispose() and triggerExit() can't both win — the
+  // first wins, second is dropped. triggerExit-then-dispose preserves the
+  // test-supplied exit code; dispose-then-triggerExit (rarer) keeps 0/null.
+  let exitSettled = false;
   let exitResolve: ((value: { exitCode: number | null; signal: NodeJS.Signals | null }) => void) | undefined;
+  const settleExit = (value: { exitCode: number | null; signal: NodeJS.Signals | null }): void => {
+    if (exitSettled) {
+      return;
+    }
+    exitSettled = true;
+    exitResolve?.(value);
+  };
   const closedPromise = new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve) => {
     exitResolve = resolve;
   });
@@ -315,7 +326,7 @@ export const connectMockHost = async (
     stderrTail: () => [...stderrTailLines],
     closed: closedPromise,
     dispose: async () => {
-      exitResolve?.({ exitCode: 0, signal: null });
+      settleExit({ exitCode: 0, signal: null });
     },
   };
 
@@ -339,7 +350,7 @@ export const connectMockHost = async (
       stderrTailLines.push(line);
     },
     triggerExit: (exitCode, signal) => {
-      exitResolve?.({ exitCode, signal: signal ?? null });
+      settleExit({ exitCode, signal: signal ?? null });
     },
     close,
     [Symbol.asyncDispose]: close,

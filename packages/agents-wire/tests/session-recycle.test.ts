@@ -5,12 +5,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { createSession } from "@/api/session";
 import type { ISessionOptionsInternal } from "@/api/session";
-import { connectMockHost } from "@/testing/mock-host";
+import { createSession } from "@/api/session";
 import type { IWireHost } from "@/runtime/host";
-import type { ISessionOptions } from "@/types/options";
+import { connectMockHost } from "@/testing/mock-host";
 import type { TAgentId } from "@/types/agent";
+import type { ISessionOptions } from "@/types/options";
 
 // Factory helpers
 
@@ -190,7 +190,7 @@ describe("sessionMaxTurnsBeforeRecycle", () => {
     await session.close();
   });
 
-  test("stream() calls do not trigger recycle", async () => {
+  test("stream() calls trigger recycle on turn limit (parity with ask)", async () => {
     const mock = makeMockHostFactory({
       onPrompt: function* () {
         yield { type: "text-delta" as const, text: "streaming", messageId: undefined };
@@ -202,16 +202,19 @@ describe("sessionMaxTurnsBeforeRecycle", () => {
       _hostFactory: mock.factory,
     } as ISessionOptionsInternal);
 
-    // Stream 3 times - should NOT trigger recycle (stream doesn't increment turnCount)
+    // 3 streamed turns with maxTurnsBeforeRecycle: 1 should produce 3 hosts
+    // (1 initial + 2 recycles), matching the ask() path. Previously
+    // stream() under-counted so the subprocess never recycled.
     for (let i = 0; i < 3; i++) {
       const s = session.stream("hello");
-      for await (const _ of s) { /* drain */ }
+      for await (const _ of s) {
+        /* drain */
+      }
       await s.result();
     }
     await session.close();
 
-    // Only 1 host - no recycling from streams
-    expect(mock.hostCount).toBe(1);
+    expect(mock.hostCount).toBe(3);
   });
 
   test("multiple recycles work correctly - hostCount increments each time", async () => {

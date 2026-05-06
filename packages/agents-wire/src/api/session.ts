@@ -1,5 +1,4 @@
 import type { SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
-import { enforceBudget } from "@/budget/guard";
 import { createCostTracker, type ICostTracker } from "@/budget/tracker";
 import { definitionFor } from "@/catalog/index";
 import { DEFAULT_MAX_TURNS_BEFORE_RECYCLE, MAX_RESPAWN_ATTEMPTS, RESPAWN_BACKOFF_MS } from "@/constants";
@@ -48,32 +47,30 @@ export const computeBackoffMs = (attempt: number): number => {
   return RESPAWN_BACKOFF_MS[idx] ?? 0;
 };
 
-const consumeStream = async (
-  raw: IHostStream,
-  cost: ICostTracker,
-  agent: TAgentId,
-  model: string | undefined,
-  options: IAskOptions,
-): Promise<IAskResult> => {
+const consumeStream = async (raw: IHostStream, cost: ICostTracker, agent: TAgentId, model: string | undefined): Promise<IAskResult> => {
   raw.completion.catch(() => {});
   for await (const event of raw) {
     if (event.type === "usage") {
+      // cost.record() throws BudgetExceededError when budgetUsd is set;
+      // no separate enforceBudget needed.
       cost.record(event.usage, agent, model);
-      enforceBudget({ tracker: cost, agent, ...(options.maxCostUsd !== undefined ? { maxCostUsd: options.maxCostUsd } : {}) });
     }
   }
   const result = await raw.completion;
-  options.onCostUpdate?.(cost.snapshot);
+  // No manual onCostUpdate fire here — the tracker is built with
+  // `onUpdate: options.onCostUpdate`, so `cost.record(...)` above already
+  // fired the user callback on every usage event including the final one.
+  // A second post-loop call would double-fire with identical totals.
   return { ...result, cost: cost.snapshot };
 };
 
-const buildSchemaSystemPrompt = async <T>(schema: TSchemaInput<T>, base: string | undefined): Promise<string> => {
+const buildSchemaSystemPrompt = async <T>(schema: TSchemaInput<T>, base: string | undefined, onWarning?: (msg: string) => void): Promise<string> => {
   const guidance = base ?? DEFAULT_JSON_SYSTEM_PROMPT;
   if (typeof schema === "string") {
     return `${guidance}\n\nJSON Schema:\n${schema}`;
   }
   if (isStandardSchema(schema)) {
-    const derived = await standardSchemaToJsonSchema(schema);
+    const derived = await standardSchemaToJsonSchema(schema, onWarning);
     if (derived) {
       return `${guidance}\n\nJSON Schema:\n${derived}`;
     }
@@ -103,6 +100,7 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
     ...(options.maxCostUsd !== undefined ? { budgetUsd: options.maxCostUsd } : {}),
     ...(options.costEstimator ? { estimator: options.costEstimator } : {}),
     ...(options.onCostUpdate ? { onUpdate: options.onCostUpdate } : {}),
+    ...(options.onWarning ? { onWarning: options.onWarning } : {}),
   });
 
   let closed = false;
@@ -152,6 +150,11 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
     options.onRetry?.(attempt, error);
     const delayMs = computeBackoffMs(attempt);
     await new Promise((r) => setTimeout(r, delayMs));
+    // close() may have landed during the backoff sleep — bail rather than
+    // resurrect a process the caller already gave up on.
+    if (closed) {
+      throw new WireError("connection-closed", `Session ${currentSessionId} closed during respawn backoff`, { agent });
+    }
     await recreateHost();
   };
 
@@ -174,12 +177,17 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
   // respawn the agent — the spawned process is already running with the session-level model flag.
   const doAsk = async (prompt: string, askOptions: IAskOptions = {}): Promise<IAskResult> => {
     if (closed) {
-      throw new Error(`Session ${currentSessionId} is closed`);
+      throw new WireError("connection-closed", `Session ${currentSessionId} is closed`, { agent });
     }
 
     // Proactive recycle: if the previous ask hit the turn limit, recycle before this ask.
     if (pendingRecycle) {
       await recycle();
+      // close() may have landed during the recycle await — bail before
+      // running the prompt against a now-stale host.
+      if (closed) {
+        throw new WireError("connection-closed", `Session ${currentSessionId} is closed`, { agent });
+      }
     }
 
     const merged: IAskOptions = { ...options, ...askOptions };
@@ -199,7 +207,7 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
           ...(merged.signal ? { signal: merged.signal } : {}),
           ...(merged.meta ? { meta: merged.meta } : {}),
         });
-        const result = await consumeStream(raw, cost, agent, merged.model, merged);
+        const result = await consumeStream(raw, cost, agent, merged.model);
         turnCount += 1;
         if (maxTurns > 0 && turnCount >= maxTurns) {
           pendingRecycle = true;
@@ -242,10 +250,11 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
   // so it doesn't hold a stale host/sessionId. Relay through a deferred queue + lazy cancel/completion.
   const stream = (prompt: string, askOptions: IAskOptions = {}): IAgentStream => {
     if (closed) {
-      throw new Error(`Session ${currentSessionId} is closed`);
+      throw new WireError("connection-closed", `Session ${currentSessionId} is closed`, { agent });
     }
     const merged: IAskOptions = { ...options, ...askOptions };
     const events = createAsyncQueue<TAgentEvent>();
+    const maxTurns = options.maxTurnsBeforeRecycle ?? DEFAULT_MAX_TURNS_BEFORE_RECYCLE;
     let upstreamCancel: () => Promise<void> = async () => {};
     let cancelled = false;
 
@@ -254,6 +263,17 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
         await inFlight;
       } catch {
         /* prior op already failed; carry on */
+      }
+      // Honor recycle-on-turn-limit on the streaming path too — without
+      // this, a caller that uses only stream() never recycles the
+      // subprocess no matter how many turns elapse.
+      if (pendingRecycle) {
+        await recycle();
+        if (closed) {
+          const err = new WireError("connection-closed", `Session ${currentSessionId} is closed`, { agent });
+          events.fail(err);
+          throw err;
+        }
       }
       if (closed) {
         const err = new WireError("cancelled", `Session ${currentSessionId} is closed`, { agent });
@@ -273,11 +293,22 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
       }
       try {
         for await (const event of raw) {
+          if (event.type === "usage") {
+            cost.record(event.usage, agent, merged.model);
+          }
           events.push(event);
         }
         const result = await raw.completion;
         events.end();
-        return result;
+        // Count this streamed turn toward maxTurnsBeforeRecycle (was only
+        // counted on the doAsk path, which under-counted callers using
+        // stream() exclusively).
+        turnCount += 1;
+        if (maxTurns > 0 && turnCount >= maxTurns) {
+          pendingRecycle = true;
+        }
+        // No manual onCostUpdate fire — see consumeStream comment above.
+        return { ...result, cost: cost.snapshot };
       } catch (err) {
         events.fail(err);
         throw err;
@@ -286,7 +317,9 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
     inFlight = completion.catch(() => {});
 
     return wrapStream({
-      sessionId: currentSessionId,
+      // Getter follows respawn — wrapStream snapshot would otherwise expose
+      // a stale id if recreateHost() runs between this call and the IIFE.
+      sessionId: () => currentSessionId,
       events,
       completion,
       cancel: async () => {
@@ -298,19 +331,40 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, askOptions: IAskOptions = {}): Promise<IJsonResult<T>> => {
     const merged: IAskOptions = { ...options, ...askOptions };
-    const guidanceBase = merged.systemPrompt ?? DEFAULT_JSON_SYSTEM_PROMPT;
-    const systemPrompt = await buildSchemaSystemPrompt(schema, guidanceBase);
+    // Always include DEFAULT_JSON_SYSTEM_PROMPT — caller's systemPrompt augments,
+    // never replaces, the JSON-formatting guidance the parser depends on.
+    const guidanceBase = merged.systemPrompt ? `${merged.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;
+    const systemPrompt = await buildSchemaSystemPrompt(schema, guidanceBase, options.onWarning);
     const raw = await ask(prompt, { ...merged, systemPrompt });
     const data = await parseAndValidate<T>(raw.text, schema);
     return { data, raw };
   };
 
-  const setMode = (modeId: string): Promise<void> => {
-    return host.setMode(currentSessionId as never, modeId);
+  const setMode = async (modeId: string): Promise<void> => {
+    // Chain through inFlight so a concurrent respawn / recycle can't swap
+    // host + currentSessionId mid-call. Without this, setMode could land
+    // on the closing host with the about-to-be-stale id.
+    try {
+      await inFlight;
+    } catch {
+      /* prior op already failed; carry on */
+    }
+    if (closed) {
+      throw new WireError("connection-closed", `Session ${currentSessionId} is closed`, { agent });
+    }
+    await host.setMode(currentSessionId as never, modeId);
   };
 
   const cancel = async (): Promise<void> => {
-    await host.cancel(currentSessionId as never);
+    // Snapshot the host + sessionId pair before the await so a concurrent
+    // recreateHost() doesn't swap them mid-call (the in-flight cancel
+    // would otherwise hit a now-closed host).
+    if (closed) {
+      return;
+    }
+    const snapshotHost = host;
+    const snapshotId = currentSessionId;
+    await snapshotHost.cancel(snapshotId as never);
   };
 
   const close = async (): Promise<void> => {
@@ -318,7 +372,22 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
       return;
     }
     closed = true;
-    await host.close();
+    // Tear down the host first — host.close() failActives every in-flight
+    // stream (host.ts) so their queues fail and their IIFEs unblock. Then
+    // settle inFlight so callers awaiting close() observe the same final
+    // state as the in-flight operation. Awaiting inFlight BEFORE host.close
+    // would deadlock: the in-flight stream's IIFE is parked on host events
+    // that only host.close can drain.
+    try {
+      await host.close();
+    } catch {
+      /* host.close errors are surfaced via onWarning inside host */
+    }
+    try {
+      await inFlight;
+    } catch {
+      /* in-flight op was cancelled by host.close; that's the contract */
+    }
   };
 
   const listSessions = (input?: { cwd?: string; cursor?: string }): Promise<ISessionListPage> => {

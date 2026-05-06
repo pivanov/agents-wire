@@ -16,6 +16,8 @@ export const claude: IAgentDefinition = {
   // post-init (claude-agent-acp populates Mode + Model + thought_level
   // selectors at newSession time, no auth required). See `resolveModels`.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["claude-code", "claude-agent"],
+  nativeSystemPrompt: true,
   launch(options = {}) {
     const entry = options.binaryOverride ?? resolvePackageEntry(BRIDGE_ENTRY);
     return {

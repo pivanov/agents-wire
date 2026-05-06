@@ -15,6 +15,7 @@
     "noUncheckedIndexedAccess": true,
     "types": ["bun"],
     "paths": {
+      "@/*": ["../../../packages/agents-wire/src/*"],
       "@pivanov/agents-wire": ["../../../packages/agents-wire/src/index.ts"],
       "@pivanov/agents-wire/errors": ["../../../packages/agents-wire/src/errors.ts"]
     }

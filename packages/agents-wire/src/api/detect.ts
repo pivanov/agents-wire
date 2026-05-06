@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { listDefinitions } from "@/catalog/index";
 import { probeBinaryVersion } from "@/internal/probe";
 import type { IAgentDefinition, IProbeOutcome, TAgentId } from "@/types/agent";
@@ -19,7 +20,16 @@ const fallbackProbe = async (definition: IAgentDefinition): Promise<IProbeOutcom
   return probeBinaryVersion(spec.command);
 };
 
-const runProbe = (definition: IAgentDefinition): Promise<IProbeOutcome> => {
+const runProbe = async (definition: IAgentDefinition): Promise<IProbeOutcome> => {
+  // Optional cheap pre-filter — skips the subprocess-spawning probe when
+  // the agent's config dirs aren't present. Falls through to legacyDirs
+  // for renamed-product graveyard entries before declaring unavailable.
+  if (definition.quickCheck && !definition.quickCheck()) {
+    const legacyHit = definition.legacyDirs?.some((dir) => existsSync(dir));
+    if (!legacyHit) {
+      return { available: false, reason: "no config directory found" };
+    }
+  }
   if (definition.probe) {
     return definition.probe();
   }

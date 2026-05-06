@@ -12,6 +12,7 @@ import type {
 import type { IAgentSession } from "@/api/session";
 import { createSession } from "@/api/session";
 import { AI_SDK_PROVIDER_OPTIONS_KEY, PACKAGE_NAME } from "@/constants";
+import { WireError } from "@/errors";
 import { createAsyncQueue } from "@/internal/async-queue";
 import type { TAgentId } from "@/types/agent";
 import type { ISessionOptions, ISlashCommand } from "@/types/options";
@@ -21,10 +22,20 @@ import { promptToText } from "./prompt";
 const TEXT_BLOCK_ID = "agents-wire-session-text";
 const REASONING_BLOCK_ID = "agents-wire-session-reasoning";
 
-const buildUsage = (usage: IUsageReport | undefined): LanguageModelV3Usage => ({
-  inputTokens: { total: usage?.tokensIn ?? 0, noCache: usage?.tokensIn ?? 0, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: usage?.tokensOut ?? 0, text: usage?.tokensOut ?? 0, reasoning: undefined },
-});
+const buildUsage = (usage: IUsageReport | undefined): LanguageModelV3Usage => {
+  const cacheRead = usage?.tokensCacheRead ?? 0;
+  const cacheWrite = usage?.tokensCacheWrite ?? 0;
+  const tokensIn = usage?.tokensIn ?? 0;
+  return {
+    inputTokens: {
+      total: tokensIn,
+      noCache: Math.max(0, tokensIn - cacheRead),
+      cacheRead: cacheRead || undefined,
+      cacheWrite: cacheWrite || undefined,
+    },
+    outputTokens: { total: usage?.tokensOut ?? 0, text: usage?.tokensOut ?? 0, reasoning: undefined },
+  };
+};
 
 const mapFinishReason = (reason: TStopReason): LanguageModelV3FinishReason => {
   const raw = String(reason);
@@ -84,14 +95,18 @@ const callOptionWarnings = (options: LanguageModelV3CallOptions): SharedV3Warnin
 export interface IAgentSessionModel {
   readonly model: LanguageModelV3;
   readonly session: IAgentSession;
-  close: () => Promise<void>;
-  [Symbol.asyncDispose]: () => Promise<void>;
+  readonly close: () => Promise<void>;
+  readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptions: ISessionOptions = {}): LanguageModelV3 => {
   const supportedUrls: Record<string, RegExp[]> = {};
 
   const doGenerate = async (options: LanguageModelV3CallOptions): Promise<LanguageModelV3GenerateResult> => {
+    // Pre-abort short-circuit (matches doStream + language-model.doGenerate).
+    if (options.abortSignal?.aborted) {
+      throw options.abortSignal.reason ?? new WireError("cancelled", "call aborted before start", { agent });
+    }
     const warnings = callOptionWarnings(options);
     const providerOpts = (options.providerOptions?.[AI_SDK_PROVIDER_OPTIONS_KEY] ?? {}) as { command?: ISlashCommand | string };
     const command = parseCommand(providerOpts.command ?? sessionOptions.command);
@@ -129,8 +144,23 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
     const partQueue = createAsyncQueue<LanguageModelV3StreamPart>();
     let textOpen = false;
     let reasoningOpen = false;
+    const toolNameById = new Map<string, string>();
 
     void (async () => {
+      let cancelStream: (() => Promise<void>) | undefined;
+      const onAbort = (): void => {
+        partQueue.fail(options.abortSignal?.reason ?? new WireError("cancelled", "stream aborted"));
+        if (cancelStream) {
+          void cancelStream();
+        }
+      };
+      if (options.abortSignal) {
+        if (options.abortSignal.aborted) {
+          onAbort();
+          return;
+        }
+        options.abortSignal.addEventListener("abort", onAbort, { once: true });
+      }
       try {
         partQueue.push({ type: "stream-start", warnings });
         partQueue.push({ type: "response-metadata", id: session.sessionId });
@@ -139,6 +169,7 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
           ...(options.abortSignal ? { signal: options.abortSignal } : {}),
           ...(command ? { command } : {}),
         });
+        cancelStream = stream.cancel;
         for await (const event of stream) {
           if (event.type === "text-delta") {
             if (!textOpen) {
@@ -157,6 +188,7 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
             continue;
           }
           if (event.type === "tool-call") {
+            toolNameById.set(event.toolCallId, event.tool);
             partQueue.push({
               type: "tool-call",
               toolCallId: event.toolCallId,
@@ -167,18 +199,19 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
             continue;
           }
           if (event.type === "tool-call-update") {
+            const toolName = toolNameById.get(event.toolCallId) ?? event.title ?? event.toolCallId;
             if (event.status === "completed" && event.output !== undefined) {
               partQueue.push({
                 type: "tool-result",
                 toolCallId: event.toolCallId,
-                toolName: event.title ?? event.toolCallId,
+                toolName,
                 result: event.output as NonNullable<unknown>,
               });
             } else if (event.status === "failed") {
               partQueue.push({
                 type: "tool-result",
                 toolCallId: event.toolCallId,
-                toolName: event.title ?? event.toolCallId,
+                toolName,
                 result: (event.output ?? "Tool call failed") as NonNullable<unknown>,
                 isError: true,
               });
@@ -199,8 +232,25 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
         });
         partQueue.end();
       } catch (cause) {
+        // Close any open blocks first so AI SDK consumers don't see
+        // text-start without text-end on error.
+        if (reasoningOpen) {
+          partQueue.push({ type: "reasoning-end", id: REASONING_BLOCK_ID });
+        }
+        if (textOpen) {
+          partQueue.push({ type: "text-end", id: TEXT_BLOCK_ID });
+        }
+        partQueue.push({
+          type: "finish",
+          finishReason: { unified: "error", raw: "error" },
+          usage: buildUsage(undefined),
+        });
         partQueue.push({ type: "error", error: cause });
         partQueue.end();
+      } finally {
+        if (options.abortSignal) {
+          options.abortSignal.removeEventListener("abort", onAbort);
+        }
       }
     })();
 

@@ -59,14 +59,30 @@ export const toPendingPermission = (
 export const policyToResolver = (policy: TPermissionPolicy = "auto-allow"): TPolicyResolver => {
   if (typeof policy === "function") {
     return async (request) => {
-      const decision = await policy(
-        toPendingPermission(
-          request,
-          () => {},
-          () => {},
-        ),
-      );
+      // Function policies decide via the RETURN VALUE, not via the
+      // pending permission's respond()/cancel() callbacks (those exist for
+      // the "stream" policy where the consumer drives decisions over the
+      // event queue). If a function-policy implementation reaches for them
+      // by mistake, throw loudly rather than silently no-op.
+      const noopRespond = (): void => {
+        throw new Error(
+          'IPendingPermission.respond() is a no-op inside a function policy. Return { id, label } from the policy callback instead, or use permission: "stream".',
+        );
+      };
+      const noopCancel = (): void => {
+        throw new Error(
+          'IPendingPermission.cancel() is a no-op inside a function policy. Return "cancel" from the policy callback instead, or use permission: "stream".',
+        );
+      };
+      const decision = await policy(toPendingPermission(request, noopRespond, noopCancel));
       if (decision === "cancel") {
+        return cancelled();
+      }
+      // Validate the decision shape before forwarding to ACP. A stray
+      // undefined / null / non-{id} return value would otherwise emit
+      // optionId: undefined, which is a protocol violation. Treat as
+      // cancelled and surface the misuse via the runtime error.
+      if (!decision || typeof decision !== "object" || typeof (decision as { id?: unknown }).id !== "string") {
         return cancelled();
       }
       return select(decision.id);

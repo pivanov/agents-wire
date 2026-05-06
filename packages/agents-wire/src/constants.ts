@@ -1,6 +1,9 @@
 export const PACKAGE_NAME = "@pivanov/agents-wire";
 export const PACKAGE_TITLE = "agents-wire";
-export const PACKAGE_VERSION = "0.0.4";
+// Replaced at build time by tsup `define` from package.json#version. The
+// `typeof` guard keeps this safe in tests / dev that import src directly.
+declare const __PKG_VERSION__: string | undefined;
+export const PACKAGE_VERSION: string = typeof __PKG_VERSION__ !== "undefined" ? __PKG_VERSION__ : "0.0.0-dev";
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -8,6 +11,10 @@ export const DEFAULT_INACTIVITY_TIMEOUT_MS = 180_000;
 export const DEFAULT_INITIALIZE_TIMEOUT_MS = 30_000;
 export const DEFAULT_DISPOSE_GRACE_MS = 250;
 export const DEFAULT_STDERR_TAIL_LIMIT = 64;
+// Backstop deadline for cancelStream when inactivityTimeoutMs <= 0.
+// A non-compliant agent that acks cancel but never finishes the stream
+// triggers a forceFail after this window so the consumer can't hang.
+export const CANCEL_DEADLINE_MS = 30_000;
 
 export const AUTH_FAILURE_PATTERNS = [
   "authentication required",

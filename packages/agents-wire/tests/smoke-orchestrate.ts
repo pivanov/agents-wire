@@ -18,16 +18,12 @@ const log = (label: string, value: unknown): void => {
 const checkFailover = async (): Promise<void> => {
   console.log("\n=== failover (dud → claude) ===");
   const startedAt = Date.now();
-  const result = await agents.failover(
-    "Reply with exactly the four characters: pong",
-    ["dud", "claude"],
-    {
-      permission: "auto-allow",
-      maxCostUsd: 0.5,
-      shouldRetry: () => true,
-      onAttempt: ({ agent, attempt }) => console.log(`  trying #${attempt}: ${agent}`),
-    },
-  );
+  const result = await agents.failover("Reply with exactly the four characters: pong", ["dud", "claude"], {
+    permission: "auto-allow",
+    maxCostUsd: 0.5,
+    shouldRetry: () => true,
+    onAttempt: ({ agent, attempt }) => console.log(`  trying #${attempt}: ${agent}`),
+  });
   log("failover.elapsedMs", Date.now() - startedAt);
   log("failover.winner", result.winner);
   log("failover.attemptedCount", result.attempted.length);
@@ -38,14 +34,10 @@ const checkFailover = async (): Promise<void> => {
 const checkRace = async (): Promise<void> => {
   console.log("\n=== race (dud vs claude) ===");
   const startedAt = Date.now();
-  const result = await agents.race(
-    "Reply with exactly the four characters: pong",
-    ["dud", "claude"],
-    {
-      permission: "auto-allow",
-      maxCostUsd: 0.5,
-    },
-  );
+  const result = await agents.race("Reply with exactly the four characters: pong", ["dud", "claude"], {
+    permission: "auto-allow",
+    maxCostUsd: 0.5,
+  });
   log("race.elapsedMs", Date.now() - startedAt);
   log("race.winner", result.winner);
   log("race.losersCount", result.losers.length);
@@ -82,7 +74,10 @@ const checkPool = async (): Promise<void> => {
   const results = await Promise.all(prompts.map((p) => pool.ask(p)));
   log("pool.elapsedMs", Date.now() - startedAt);
   log("pool.size", pool.size);
-  log("pool.replies", results.map((r) => r.text.trim()));
+  log(
+    "pool.replies",
+    results.map((r) => r.text.trim()),
+  );
   log("pool.cost.totalUsd", pool.cost.snapshot.totalUsd);
   log("pool.cost.turns", pool.cost.snapshot.turns);
 };

@@ -1,19 +1,15 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "bun:test";
-import type { IAgentSession } from "@/api/session";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { resolveModels } from "@/api/resolve-models";
+import type { IAgentSession } from "@/api/session";
 import { registerDefinition, unregisterDefinition } from "@/catalog/index";
 import type { IAgentDefinition } from "@/types/agent";
 
 // Build a minimal stub IAgentSession exposing only the fields
 // resolveModels reads. resolveModels never calls ask/prompt/close/etc.
-const fakeSession = (configOptions: readonly SessionConfigOption[] | undefined): IAgentSession =>
-  ({ configOptions } as unknown as IAgentSession);
+const fakeSession = (configOptions: readonly SessionConfigOption[] | undefined): IAgentSession => ({ configOptions }) as unknown as IAgentSession;
 
-const stubDefinition = (
-  id: string,
-  overrides: Partial<IAgentDefinition> = {},
-): IAgentDefinition => ({
+const stubDefinition = (id: string, overrides: Partial<IAgentDefinition> = {}): IAgentDefinition => ({
   id,
   label: id,
   transport: "native-acp",

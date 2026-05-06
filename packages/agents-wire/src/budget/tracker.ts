@@ -1,3 +1,4 @@
+import { BudgetExceededError } from "@/errors";
 import type { TAgentId } from "@/types/agent";
 import type { ICostBucket, ICostSnapshot, IUsageReport } from "@/types/results";
 import { getPricing, type IModelPricing, pricingKey, type TPricingOverrides } from "./pricing";
@@ -8,6 +9,8 @@ export interface ICostTrackerOptions {
   readonly onUpdate?: (snapshot: ICostSnapshot) => void;
   /** Per-tracker pricing overrides; takes precedence over the process-global table. */
   readonly pricingOverrides?: ReadonlyArray<{ agent: TAgentId; model: string; pricing: IModelPricing }>;
+  /** Surfaces missing-pricing warnings (one-shot per agent/model) so a budget gate isn't silently a no-op. */
+  readonly onWarning?: (message: string) => void;
 }
 
 export interface ICostTracker {
@@ -98,6 +101,9 @@ const createTrackerInternal = (
 ): ICostTracker => {
   let totals = emptyBucket();
   let byAgent = new Map<TAgentId, ICostBucket>();
+  // Set of agent::model keys we've already warned about — prevents log spam
+  // on every usage event for the same unknown model.
+  const warnedMissingPricing = new Set<string>();
 
   const scopedOverrides: TPricingOverrides | undefined = options.pricingOverrides
     ? new Map(options.pricingOverrides.map((entry) => [pricingKey(entry.agent, entry.model), entry.pricing]))
@@ -115,11 +121,69 @@ const createTrackerInternal = (
 
   const record = (usage: IUsageReport, agent: TAgentId, model?: string): ICostSnapshot => {
     const addedCost = computeCost(usage, agent, model, options.estimator, scopedOverrides);
+    // Loud-fail unknown models when a budget is set: an unknown price means
+    // addedCost is 0 and the budget gate is silently a no-op. Warn once per
+    // (agent, model) so callers know to supply costEstimator / pricingOverrides.
+    if (
+      options.budgetUsd !== undefined &&
+      typeof usage.costUsd !== "number" &&
+      !options.estimator &&
+      model &&
+      !getPricing(agent, model, scopedOverrides)
+    ) {
+      const key = pricingKey(agent, model);
+      if (!warnedMissingPricing.has(key)) {
+        warnedMissingPricing.add(key);
+        options.onWarning?.(
+          `No pricing for ${agent}/${model}; budget enforcement is disabled for this model. Provide pricingOverrides or costEstimator.`,
+        );
+      }
+    }
+    // Zero-cost guard: when a budget is set and the usage event carried
+    // neither a costUsd nor any tokens, addedCost is 0 and the budget gate
+    // is silently a no-op even though pricing IS configured. This is the
+    // ACP-only path — `usage_update` carries `size`/`used`/`cost.amount`
+    // but no token counts, so the pricing-table lookup multiplies by zero.
+    // Warn once so callers know they need a costEstimator or an
+    // ACP-cost-amount-emitting agent.
+    if (
+      options.budgetUsd !== undefined &&
+      addedCost === 0 &&
+      typeof usage.costUsd !== "number" &&
+      !options.estimator &&
+      !usage.tokensIn &&
+      !usage.tokensOut &&
+      !usage.tokensCacheRead &&
+      !usage.tokensCacheWrite
+    ) {
+      const key = `__zero__::${agent}::${model ?? "default"}`;
+      if (!warnedMissingPricing.has(key)) {
+        warnedMissingPricing.add(key);
+        options.onWarning?.(
+          `Usage event for ${agent}/${model ?? "default"} carried no costUsd and no token counts; budget enforcement contributes $0 for this turn. Provide costEstimator or use an agent that emits cost.amount.`,
+        );
+      }
+    }
+    // Record first — the cost is real (the model already burned those
+    // tokens upstream), so the snapshot must reflect actual spend even
+    // when we throw. Then check the budget against the new total and
+    // throw if exceeded; the throw still gates further admissions.
     totals = accumulate(totals, usage, addedCost);
     const existing = byAgent.get(agent) ?? emptyBucket();
     byAgent.set(agent, accumulate(existing, usage, addedCost));
     const next = currentSnapshot();
-    options.onUpdate?.(next);
+    // Guard the threshold check from a throwing user callback — without
+    // try/catch a thrown onUpdate would skip the budget gate entirely.
+    try {
+      options.onUpdate?.(next);
+    } catch {
+      /* swallow user-callback failure; budget gate still runs */
+    }
+    // `>=` matches enforceBudget() and the session.ts pre-check so all three
+    // gates agree on "at-or-over the budget is exceeded".
+    if (options.budgetUsd !== undefined && next.totalUsd >= options.budgetUsd) {
+      throw new BudgetExceededError(next.totalUsd, options.budgetUsd, { agent });
+    }
     return next;
   };
 
@@ -133,6 +197,10 @@ const createTrackerInternal = (
   const reset = (): void => {
     totals = emptyBucket();
     byAgent = new Map();
+    // Clear warning dedupe so a logical reset re-arms the missing-pricing /
+    // zero-cost warnings instead of muting them permanently for the
+    // tracker's lifetime.
+    warnedMissingPricing.clear();
   };
 
   const project = (remainingTurns: number): { projectedUsd: number } => {

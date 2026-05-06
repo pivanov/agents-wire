@@ -12,6 +12,7 @@ export const droid: IAgentDefinition = {
   // before responding. Pre-auth users see "Default" only; post-auth,
   // `resolveModels` upgrades from session.configOptions / modelPreference.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["factory-droid", "factory"],
   launch(options = {}) {
     return {
       command: options.binaryOverride ?? "droid",

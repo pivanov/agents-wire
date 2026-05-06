@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createMockAgent, createRecorder, parseTranscript, replayTranscript } from "@/testing/index";
 import type { IStandardSchema } from "@/schema/standard";
+import { createMockAgent, createRecorder, parseTranscript, replayTranscript } from "@/testing/index";
 import type { TAgentEvent } from "@/types/events";
 
 const numberAObject: IStandardSchema<{ a: number }> = {

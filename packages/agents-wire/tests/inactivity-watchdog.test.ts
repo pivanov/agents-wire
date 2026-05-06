@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { connectMockHost } from "@/testing/mock-host";
 import { AgentInactivityError } from "@/errors";
+import { connectMockHost } from "@/testing/mock-host";
 
 const SHORT_TIMEOUT = 50; // ms
 
@@ -36,7 +36,9 @@ describe("inactivity watchdog", () => {
 
     let caught: unknown;
     try {
-      for await (const _ of stream) { /* drain */ }
+      for await (const _ of stream) {
+        /* drain */
+      }
     } catch (err) {
       caught = err;
     } finally {

@@ -1,4 +1,3 @@
-import { enforceBudget } from "@/budget/guard";
 import { createCostTracker, type ICostTracker } from "@/budget/tracker";
 import { definitionFor } from "@/catalog/index";
 import { WireError } from "@/errors";
@@ -17,6 +16,7 @@ interface IWorker {
 interface IWaiter {
   resolve: (worker: IWorker) => void;
   reject: (cause: unknown) => void;
+  cleanup?: () => void;
 }
 
 export interface IPoolOptions extends ISessionOptions {
@@ -69,11 +69,29 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
   }
   const slots = distributeAgents(options.agents, capacity);
 
-  const workers = await Promise.all(slots.map((agent) => spawnWorker(agent, options)));
+  // allSettled instead of all so a single failed spawn doesn't abandon
+  // the workers that already came up — close survivors before throwing.
+  const settled = await Promise.allSettled(slots.map((agent) => spawnWorker(agent, options)));
+  const workers: IWorker[] = [];
+  const failures: unknown[] = [];
+  for (const result of settled) {
+    if (result.status === "fulfilled") {
+      workers.push(result.value);
+    } else {
+      failures.push(result.reason);
+    }
+  }
+  if (failures.length > 0) {
+    await Promise.allSettled(workers.map((w) => w.host.close()));
+    throw new WireError("spawn-failed", `Pool spawn failed: ${failures.length}/${slots.length} workers could not start`, {
+      cause: failures[0],
+    });
+  }
   const cost: ICostTracker = createCostTracker({
     ...(options.maxCostUsd !== undefined ? { budgetUsd: options.maxCostUsd } : {}),
     ...(options.costEstimator ? { estimator: options.costEstimator } : {}),
     ...(options.onCostUpdate ? { onUpdate: options.onCostUpdate } : {}),
+    ...(options.onWarning ? { onWarning: options.onWarning } : {}),
   });
 
   const waiters: IWaiter[] = [];
@@ -92,9 +110,12 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
     }
   };
 
-  const acquire = (): Promise<IWorker> => {
+  const acquire = (signal?: AbortSignal): Promise<IWorker> => {
     if (closed) {
       return Promise.reject(new WireError("connection-closed", "Pool is closed"));
+    }
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason ?? new WireError("cancelled", "Pool acquire aborted"));
     }
     const free = workers.find((worker) => !worker.busy);
     if (free) {
@@ -102,14 +123,37 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
       return Promise.resolve(free);
     }
     return new Promise<IWorker>((resolve, reject) => {
-      waiters.push({ resolve, reject });
+      const waiter: IWaiter = { resolve, reject };
+      waiters.push(waiter);
+      if (signal) {
+        const onAbort = (): void => {
+          const idx = waiters.indexOf(waiter);
+          if (idx >= 0) {
+            waiters.splice(idx, 1);
+          }
+          reject(signal.reason ?? new WireError("cancelled", "Pool acquire aborted"));
+        };
+        // `cleanup` removes the abort listener (called when the waiter is
+        // claimed by release() or freed by close()). It is NOT the abort
+        // handler itself.
+        waiter.cleanup = () => signal.removeEventListener("abort", onAbort);
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
     });
   };
 
   const release = (worker: IWorker): void => {
     worker.busy = false;
+    // If close() landed while ask() was in flight, don't hand the worker to a
+    // queued waiter — close() is mid-await on host.close() and the new caller's
+    // host.prompt() would race with the in-flight tear-down. close() flushes
+    // pending waiters with connection-closed; let that handle them.
+    if (closed) {
+      return;
+    }
     const next = waiters.shift();
     if (next) {
+      next.cleanup?.();
       worker.busy = true;
       next.resolve(worker);
       return;
@@ -121,7 +165,9 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
     if (closed) {
       throw new WireError("connection-closed", "Pool is closed");
     }
-    const worker = await acquire();
+    const worker = await acquire(askOptions.signal);
+    // Outer try/finally guarantees release(worker) runs even if
+    // host.prompt() throws synchronously before the stream is built.
     try {
       const stream = worker.host.prompt(worker.sessionId, {
         prompt,
@@ -130,19 +176,26 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
         ...(askOptions.signal ? { signal: askOptions.signal } : {}),
         ...(askOptions.meta ? { meta: askOptions.meta } : {}),
       });
-      for await (const event of stream) {
-        if (event.type === "usage") {
-          cost.record(event.usage, worker.agent, askOptions.model ?? options.model);
-          enforceBudget({
-            tracker: cost,
-            agent: worker.agent,
-            ...(options.maxCostUsd !== undefined ? { maxCostUsd: options.maxCostUsd } : {}),
-          });
+      try {
+        for await (const event of stream) {
+          if (event.type === "usage") {
+            // cost.record() throws BudgetExceededError when budgetUsd is
+            // set and the threshold is hit — no separate enforceBudget
+            // call needed (it would be a redundant snapshot read).
+            cost.record(event.usage, worker.agent, askOptions.model ?? options.model);
+          }
         }
+        const result = await stream.completion;
+        // Tracker's onUpdate already fired options.onCostUpdate per usage event.
+        return { ...result, cost: cost.snapshot, worker: worker.agent };
+      } catch (err) {
+        try {
+          await stream.cancel();
+        } catch {
+          /* swallow cancel-on-error */
+        }
+        throw err;
       }
-      const result = await stream.completion;
-      options.onCostUpdate?.(cost.snapshot);
-      return { ...result, cost: cost.snapshot, worker: worker.agent };
     } finally {
       release(worker);
     }
@@ -163,6 +216,7 @@ export const createAgentPool = async (options: IPoolOptions): Promise<IAgentPool
     }
     closed = true;
     for (const waiter of waiters.splice(0)) {
+      waiter.cleanup?.();
       waiter.reject(new WireError("connection-closed", "Pool closed before request was served"));
     }
     await Promise.allSettled(workers.map((worker) => worker.host.close()));

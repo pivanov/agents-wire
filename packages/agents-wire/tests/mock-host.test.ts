@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { connectMockHost } from "@/testing/mock-host";
 import { AgentConnectionClosedError } from "@/errors";
+import { connectMockHost } from "@/testing/mock-host";
 
 describe("connectMockHost - harness sanity", () => {
   test("creates a host with the mock definition id", async () => {
@@ -56,7 +56,9 @@ describe("connectMockHost - harness sanity", () => {
     });
     const sessionId = await ctx.host.newSession();
     const stream = ctx.host.prompt(sessionId, { prompt: "test" });
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
     expect(result.text).toBe("foobar");
   });
@@ -65,7 +67,9 @@ describe("connectMockHost - harness sanity", () => {
     await using ctx = await connectMockHost({ stopReason: "max_tokens" });
     const sessionId = await ctx.host.newSession();
     const stream = ctx.host.prompt(sessionId, { prompt: "test" });
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
     expect(result.stopReason).toBe("max_tokens");
   });
@@ -95,10 +99,7 @@ describe("connectMockHost - harness sanity", () => {
   });
 
   test("definition overrides are applied", async () => {
-    await using ctx = await connectMockHost(
-      {},
-      { definition: { id: "custom-agent" as never, label: "Custom" } },
-    );
+    await using ctx = await connectMockHost({}, { definition: { id: "custom-agent" as never, label: "Custom" } });
     expect(ctx.definition.id).toBe("custom-agent");
     expect(ctx.host.definition.label).toBe("Custom");
   });

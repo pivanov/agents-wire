@@ -35,9 +35,7 @@ const makeAcpResponse = (sessions: { sessionId: string; cwd: string; title?: str
  * Extract the mapping logic from `createWireHost` so we can test it in
  * isolation without spinning up a real agent process.
  */
-const mapListSessionsResponse = (
-  response: ReturnType<typeof makeAcpResponse>,
-): ISessionListPage => ({
+const mapListSessionsResponse = (response: ReturnType<typeof makeAcpResponse>): ISessionListPage => ({
   sessions: response.sessions.map((s) => ({
     sessionId: s.sessionId,
     ...(s.title ? { title: s.title } : {}),
@@ -83,12 +81,13 @@ describe("listSessions - capability gate", () => {
 
 describe("mapListSessionsResponse - field mapping", () => {
   test("maps sessionId, cwd, title, and updatedAt when present", () => {
-    const raw = makeAcpResponse([
-      { sessionId: "sess-1", cwd: "/home/user/project", title: "My Project", updatedAt: "2024-01-01T00:00:00Z" },
-    ]);
+    const raw = makeAcpResponse([{ sessionId: "sess-1", cwd: "/home/user/project", title: "My Project", updatedAt: "2024-01-01T00:00:00Z" }]);
     const page = mapListSessionsResponse(raw);
     expect(page.sessions).toHaveLength(1);
-    const s = page.sessions[0]!;
+    const s = page.sessions[0];
+    if (!s) {
+      throw new Error("expected first session");
+    }
     expect(s.sessionId).toBe("sess-1");
     expect(s.cwd).toBe("/home/user/project");
     expect(s.title).toBe("My Project");
@@ -98,7 +97,10 @@ describe("mapListSessionsResponse - field mapping", () => {
   test("omits optional fields when absent", () => {
     const raw = makeAcpResponse([{ sessionId: "sess-2", cwd: "/tmp" }]);
     const page = mapListSessionsResponse(raw);
-    const s = page.sessions[0]!;
+    const s = page.sessions[0];
+    if (!s) {
+      throw new Error("expected first session");
+    }
     expect(s.sessionId).toBe("sess-2");
     expect(s.cwd).toBe("/tmp");
     expect("title" in s).toBe(false);
@@ -120,10 +122,7 @@ describe("mapListSessionsResponse - field mapping", () => {
 
 describe("streamAllSessions - pagination", () => {
   test("yields sessions across multiple pages", async () => {
-    const pages = [
-      makeAcpResponse([{ sessionId: "a", cwd: "/a" }], "cursor-2"),
-      makeAcpResponse([{ sessionId: "b", cwd: "/b" }]),
-    ];
+    const pages = [makeAcpResponse([{ sessionId: "a", cwd: "/a" }], "cursor-2"), makeAcpResponse([{ sessionId: "b", cwd: "/b" }])];
 
     const collected: string[] = [];
     for await (const s of paginateWith(pages)) {

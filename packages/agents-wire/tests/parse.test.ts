@@ -18,7 +18,7 @@ const stringSchema: IStandardSchema<string> = {
 
 describe("stripFences", () => {
   test("removes ```json fences", () => {
-    expect(stripFences("```json\n{\"a\":1}\n```")).toBe('{"a":1}');
+    expect(stripFences('```json\n{"a":1}\n```')).toBe('{"a":1}');
   });
 
   test("removes plain ``` fences", () => {
@@ -26,7 +26,7 @@ describe("stripFences", () => {
   });
 
   test("trims leading prose before {", () => {
-    expect(stripFences("Here you go: {\"x\":true}")).toBe('{"x":true}');
+    expect(stripFences('Here you go: {"x":true}')).toBe('{"x":true}');
   });
 
   test("returns input unchanged if already JSON-shaped", () => {

@@ -10,7 +10,15 @@ import type { IAgentAdapter, IAgentDefinition } from "@/types/agent";
  * DEFINITION_ONLY_FIELDS (and document why).
  */
 type AdapterFields = "id" | "label" | "launch" | "probe" | "installNotice" | "homepage" | "models" | "listAvailableModels";
-type DefinitionOnlyFields = "transport" | "authFailurePatterns" | "usageLimitPatterns" | "acpCompatible";
+type DefinitionOnlyFields =
+  | "transport"
+  | "authFailurePatterns"
+  | "usageLimitPatterns"
+  | "acpCompatible"
+  | "nativeSystemPrompt"
+  | "quickCheck"
+  | "legacyDirs"
+  | "aliases";
 
 type ExtraInDefinition = Exclude<keyof IAgentDefinition, AdapterFields>;
 type ExtraInAdapter = Exclude<keyof IAgentAdapter, AdapterFields>;

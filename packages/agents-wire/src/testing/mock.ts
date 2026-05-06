@@ -49,6 +49,29 @@ export const createMockAgent = (options: IMockSessionOptions = {}): IMockSession
   const script: IScriptedTurn[] = options.turns ? [...options.turns] : [];
   let cursor = 0;
   const cost: ICostTracker = createCostTracker();
+  // Active in-flight stream cancellers. Top-level session.cancel() walks
+  // these so it actually interrupts mid-stream — the previous noop hid
+  // every regression in the real host's cancel path that exercised the
+  // mock as a contract reference.
+  const activeCancellers = new Set<() => void>();
+
+  // Helper: setTimeout that resolves early if `signal` aborts. Without
+  // this, a delayMs mid-cancel waits the full timeout before noticing —
+  // the cancel path can't be tested for promptness.
+  const delayWithCancel = (ms: number, signal: { aborted: boolean }, onCancel: (cb: () => void) => void): Promise<void> =>
+    new Promise<void>((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      const handle = setTimeout(() => {
+        resolve();
+      }, ms);
+      onCancel(() => {
+        clearTimeout(handle);
+        resolve();
+      });
+    });
 
   const nextTurn = (): IScriptedTurn => {
     if (cursor >= script.length) {
@@ -62,39 +85,77 @@ export const createMockAgent = (options: IMockSessionOptions = {}): IMockSession
   const ask = async (_prompt: string, _options: IAskOptions = {}): Promise<IAskResult> => {
     const turn = nextTurn();
     const startedAt = Date.now();
-    if (turn.delayMs && turn.delayMs > 0) {
-      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, turn.delayMs));
+    // Same delay-with-cancel pattern as stream() so a top-level
+    // session.cancel() during ask's delayMs doesn't have to wait the
+    // full timeout. Without this, tests asserting "cancel + ask settles"
+    // hang for the entire delayMs and hide regressions in real-host
+    // ask-cancel paths.
+    const signal = { aborted: false };
+    let onCancelCallback: (() => void) | undefined;
+    const fireCancel = (): void => {
+      signal.aborted = true;
+      onCancelCallback?.();
+    };
+    activeCancellers.add(fireCancel);
+    try {
+      if (turn.delayMs && turn.delayMs > 0) {
+        await delayWithCancel(turn.delayMs, signal, (cb) => {
+          onCancelCallback = cb;
+        });
+      }
+      const baseResult = buildResult(turn, sessionId, agent, Date.now() - startedAt, defaultText);
+      return signal.aborted ? { ...baseResult, stopReason: "cancelled" } : baseResult;
+    } finally {
+      activeCancellers.delete(fireCancel);
     }
-    return buildResult(turn, sessionId, agent, Date.now() - startedAt, defaultText);
   };
 
   const stream = (_prompt: string, _options: IAskOptions = {}): IAgentStream => {
     const turn = nextTurn();
     const queue = createAsyncQueue<TAgentEvent>();
     const startedAt = Date.now();
-    let cancelled = false;
+    const signal = { aborted: false };
+    let onCancelCallback: (() => void) | undefined;
+    const setOnCancel = (cb: () => void): void => {
+      onCancelCallback = cb;
+    };
+    const fireCancel = (): void => {
+      signal.aborted = true;
+      onCancelCallback?.();
+    };
+    activeCancellers.add(fireCancel);
 
     const completion = (async (): Promise<IAskResult> => {
-      const events = turn.events ?? scriptedEventsFromText(turn.text ?? defaultText);
-      for (const event of events) {
-        if (cancelled) {
-          break;
+      try {
+        const events = turn.events ?? scriptedEventsFromText(turn.text ?? defaultText);
+        for (const event of events) {
+          if (signal.aborted) {
+            break;
+          }
+          queue.push(event);
+          if (turn.delayMs && turn.delayMs > 0) {
+            await delayWithCancel(turn.delayMs, signal, setOnCancel);
+            if (signal.aborted) {
+              break;
+            }
+          }
         }
-        queue.push(event);
-        if (turn.delayMs && turn.delayMs > 0) {
-          await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, turn.delayMs));
-        }
+        // Match the real host: when cancel fires mid-stream, the finish event
+        // carries stopReason "cancelled". Otherwise use the scripted reason.
+        const baseResult = buildResult(turn, sessionId, agent, Date.now() - startedAt, defaultText);
+        const result: IAskResult = signal.aborted ? { ...baseResult, stopReason: "cancelled" } : baseResult;
+        queue.push({ type: "finish", stopReason: result.stopReason, usage: undefined, cost: undefined });
+        queue.end();
+        return result;
+      } finally {
+        activeCancellers.delete(fireCancel);
       }
-      const result = buildResult(turn, sessionId, agent, Date.now() - startedAt, defaultText);
-      queue.push({ type: "finish", stopReason: result.stopReason, usage: undefined, cost: undefined });
-      queue.end();
-      return result;
     })();
 
     return {
       sessionId,
       cancel: async () => {
-        cancelled = true;
+        fireCancel();
       },
       result: () => completion,
       [Symbol.asyncIterator]: () => queue[Symbol.asyncIterator](),
@@ -112,7 +173,12 @@ export const createMockAgent = (options: IMockSessionOptions = {}): IMockSession
   };
 
   const cancel = async (): Promise<void> => {
-    /* no-op for mock */
+    // Fire every active stream's cancel so the contract matches the real
+    // host's session-level cancel — previously a no-op which hid broken
+    // cancel paths in any test that exercised the mock as a reference.
+    for (const fire of [...activeCancellers]) {
+      fire();
+    }
   };
 
   const close = async (): Promise<void> => {

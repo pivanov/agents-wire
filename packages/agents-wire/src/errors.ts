@@ -1,4 +1,5 @@
 import { TRANSIENT_ERROR_PATTERNS } from "./constants";
+import { stripTerminalEscapes } from "./internal/strip-terminal-escapes";
 import type { TAgentId } from "./types/agent";
 
 export const KNOWN_ERROR_CODES = [
@@ -37,14 +38,25 @@ export interface IWireErrorOptions {
 export class WireError extends Error {
   readonly code: TKnownErrorCode;
   readonly agent: TAgentId | undefined;
-  readonly cause: unknown;
 
   constructor(code: TKnownErrorCode, message: string, options: IWireErrorOptions = {}) {
-    super(message);
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "WireError";
     this.code = code;
     this.agent = options.agent;
-    this.cause = options.cause;
+  }
+
+  // Without toJSON, JSON.stringify(err) returns "{}" — Error's enumerable
+  // fields are zero. Logging pipelines that JSON-serialize errors lose the
+  // code / agent fields. Custom toJSON keeps them.
+  toJSON(): { name: string; message: string; code: TKnownErrorCode; agent: TAgentId | undefined; stack?: string } {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      agent: this.agent,
+      ...(this.stack ? { stack: this.stack } : {}),
+    };
   }
 }
 
@@ -164,20 +176,39 @@ export class AgentInitTimeoutError extends WireError {
 
 // Patterns for secret-bearing tokens that some agents print on auth errors.
 // Anything matching is replaced with `[REDACTED]` before the line lands on a WireError.
+//
+// The hex pattern is bounded {40,80} (not {40,}) and requires a token-bearing
+// prefix word boundary so we don't redact bare git SHAs / ETags / SRI hashes
+// that operators rely on when triaging stderr tails.
 const SECRET_PATTERNS: readonly RegExp[] = [
   /\b(?:Bearer|Token)\s+[A-Za-z0-9._-]+/gi,
   /\bsk-[A-Za-z0-9._-]{16,}/g,
   /\bxox[bopa]-[A-Za-z0-9-]{10,}/g,
   /\bghp_[A-Za-z0-9]{20,}/g,
   /\bgho_[A-Za-z0-9]{20,}/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
-  /\b[A-Fa-f0-9]{40,}\b/g,
+  /\b(?:secret|token|key|password|api[_-]?key)["':=\s]+[A-Fa-f0-9]{40,80}\b/gi,
 ];
 
+// Auth-context heuristic: when the line names a sensitivity word
+// ("auth", "unauthorized", "forbidden", "invalid token", …) we widen
+// redaction to bare 40+-char hex tokens too. Many CLIs print
+// `error: invalid token: 9c8a…` without a key=value shape, which the
+// strict patterns above miss; the context word makes the redaction safe.
+const AUTH_CONTEXT = /\b(?:auth|unauthorized|forbidden|invalid[-_ ]?(?:token|key|credential|api[_-]?key)|access[-_ ]?denied|expired)\b/i;
+const BARE_HEX_TOKEN = /\b[A-Fa-f0-9]{40,80}\b/g;
+
 export const redactSecrets = (line: string): string => {
-  let out = line;
+  // Strip terminal-control escapes BEFORE secret redaction so a token
+  // hidden inside an OSC sequence still gets caught by the patterns.
+  // Order matters: escape removal first, then secret matching.
+  let out = stripTerminalEscapes(line);
   for (const pattern of SECRET_PATTERNS) {
     out = out.replace(pattern, "[REDACTED]");
+  }
+  if (AUTH_CONTEXT.test(out)) {
+    out = out.replace(BARE_HEX_TOKEN, "[REDACTED]");
   }
   return out;
 };
@@ -214,7 +245,14 @@ export const isKnownError = (error: unknown): error is WireError => {
 
 export const isTransientError = (error: unknown): boolean => {
   if (error instanceof WireError) {
-    return error.code === "overloaded" || error.code === "rate-limit" || error.code === "connection-closed";
+    return (
+      error.code === "overloaded" ||
+      error.code === "rate-limit" ||
+      error.code === "connection-closed" ||
+      // EPIPE on a long stream is recoverable via respawn; previously fell
+      // through to false and burned an attempt instead of retrying.
+      error.code === "stdin-closed"
+    );
   }
   if (!(error instanceof Error)) {
     return false;

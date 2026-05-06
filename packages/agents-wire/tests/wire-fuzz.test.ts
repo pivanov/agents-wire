@@ -171,7 +171,9 @@ describe("wire-fuzz - deterministic mixed event streams", () => {
 
     const sessionId = await ctx.host.newSession();
     const stream = ctx.host.prompt(sessionId, { prompt: "text-fuzz" });
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
 
     const expected = Array.from({ length: 20 }, (_, i) => String(i)).join("");
@@ -179,9 +181,7 @@ describe("wire-fuzz - deterministic mixed event streams", () => {
   });
 
   test("usage events are reflected in the completion usage report", async () => {
-    const usageEvents: TAgentEvent[] = [
-      { type: "usage", usage: { contextSize: 8000, contextUsed: 4000, costUsd: 0.01 } },
-    ];
+    const usageEvents: TAgentEvent[] = [{ type: "usage", usage: { contextSize: 8000, contextUsed: 4000, costUsd: 0.01 } }];
 
     await using ctx = await connectMockHost({
       onPrompt: function* (_sessionId, _blocks) {
@@ -191,7 +191,9 @@ describe("wire-fuzz - deterministic mixed event streams", () => {
 
     const sessionId = await ctx.host.newSession();
     const stream = ctx.host.prompt(sessionId, { prompt: "usage-test" });
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
 
     expect(result.usage).toBeDefined();

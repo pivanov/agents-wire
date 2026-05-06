@@ -18,6 +18,7 @@ export const copilot: IAgentDefinition = {
   // at newSession time without auth. Real list arrives via
   // `resolveModels` immediately after init.
   models: [{ id: "default", label: "Default" }],
+  aliases: ["github-copilot"],
   launch(options = {}) {
     if (options.binaryOverride) {
       return {

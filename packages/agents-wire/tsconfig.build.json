@@ -6,7 +6,8 @@
     "declarationMap": false,
     "sourceMap": false,
     "module": "ESNext",
-    "target": "ES2023"
+    "target": "ES2023",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "tests"],

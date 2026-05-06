@@ -2,7 +2,7 @@ import type { IStandardSchema } from "./standard";
 
 const stringify = (value: unknown): string => JSON.stringify(value);
 
-const tryZodDerive = async (schema: unknown): Promise<string | undefined> => {
+const tryZodDerive = async (schema: unknown, onWarning?: (msg: string) => void): Promise<string | undefined> => {
   try {
     const mod = await import("zod");
     const candidate = mod as { toJSONSchema?: (schema: unknown) => unknown };
@@ -13,6 +13,9 @@ const tryZodDerive = async (schema: unknown): Promise<string | undefined> => {
     if (zNamespace && typeof zNamespace.toJSONSchema === "function") {
       return stringify(zNamespace.toJSONSchema(schema));
     }
+    // Zod v3 has no toJSONSchema export — agent gets only the "JSON only"
+    // guidance, which loses the schema body and degrades parse-rate.
+    onWarning?.("Zod schema detected but `toJSONSchema` is unavailable (Zod v3?). Upgrade to Zod v4 to embed the schema in the JSON system prompt.");
     return undefined;
   } catch {
     return undefined;
@@ -46,10 +49,10 @@ const tryArkTypeDerive = (schema: unknown): string | undefined => {
   }
 };
 
-export const standardSchemaToJsonSchema = async <T>(schema: IStandardSchema<T>): Promise<string | undefined> => {
+export const standardSchemaToJsonSchema = async <T>(schema: IStandardSchema<T>, onWarning?: (msg: string) => void): Promise<string | undefined> => {
   const vendor = schema["~standard"].vendor.toLowerCase();
   if (vendor === "zod") {
-    return tryZodDerive(schema);
+    return tryZodDerive(schema, onWarning);
   }
   if (vendor === "valibot") {
     return tryValibotDerive(schema);
@@ -57,5 +60,10 @@ export const standardSchemaToJsonSchema = async <T>(schema: IStandardSchema<T>):
   if (vendor === "arktype") {
     return tryArkTypeDerive(schema);
   }
+  // Unknown vendor — caller falls back to "JSON only" guidance with no
+  // schema body; warn so operators notice schema guidance was dropped.
+  onWarning?.(
+    `Unknown Standard Schema vendor "${vendor}"; JSON schema body could not be derived. Provide a JSON Schema string or use Zod / Valibot / ArkType.`,
+  );
   return undefined;
 };

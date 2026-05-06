@@ -4,8 +4,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { createWireHost } from "@/runtime/host";
 import { AgentConnectionClosedError } from "@/errors";
+import { createWireHost } from "@/runtime/host";
 import type { IAgentDefinition } from "@/types/agent";
 
 const makeDefinition = (command: string): IAgentDefinition => ({

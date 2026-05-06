@@ -112,7 +112,9 @@ test("host operates normally when no fatal stderr is pushed", async () => {
   ctx.pushStderr("invalid api key provided");
   const sessionId = await ctx.host.newSession();
   const stream = ctx.host.prompt(sessionId, { prompt: "test" });
-  for await (const _ of stream) { /* drain */ }
+  for await (const _ of stream) {
+    /* drain */
+  }
   const result = await stream.completion;
   // Since pushStderr doesn't trigger wrappedOnStderr, no auth error fires
   expect(result.stopReason).toBe("end_turn");

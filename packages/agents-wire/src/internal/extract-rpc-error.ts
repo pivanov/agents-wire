@@ -24,7 +24,7 @@ export const extractRpcMessage = (cause: unknown): string | undefined => {
 const USAGE_PATTERNS = ["usage_limit", "quota", "usage limit", "rate limit", "billing", "monthly limit"];
 const AUTH_PATTERNS = ["unauthorized", "auth required", "authentication", "invalid api key", "session expired", "token expired"];
 const CONTEXT_PATTERNS = ["context length", "context window", "max tokens"];
-const OVERLOAD_PATTERNS = ["overloaded", "service_unavailable", "internal_server_error"];
+const OVERLOAD_PATTERNS = ["overloaded", "service_unavailable", "internal_server_error", "temporarily unavailable", "529"];
 
 const matchesAny = (text: string, patterns: readonly string[]): boolean => patterns.some((pattern) => text.includes(pattern));
 
@@ -38,7 +38,7 @@ export const classifyRpcError = (cause: unknown): TKnownErrorCode => {
   if (matchesAny(haystack, USAGE_PATTERNS)) {
     return "usage-limit";
   }
-  if (candidate.code === -32000 || matchesAny(haystack, AUTH_PATTERNS)) {
+  if (matchesAny(haystack, AUTH_PATTERNS)) {
     return "auth-required";
   }
   if (matchesAny(haystack, CONTEXT_PATTERNS)) {

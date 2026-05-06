@@ -61,28 +61,24 @@ const buildCapabilities = (): AgentCapabilities => ({});
 
 describe("setMode - IWireHost", () => {
   test("setMode succeeds when modeId is in availableModes", async () => {
-    await using ctx = await connectMockHost(
-      {
-        capabilities: buildCapabilities(),
-        initialModes: {
-          currentModeId: "auto",
-          availableModes: AVAILABLE_MODES,
-        },
+    await using ctx = await connectMockHost({
+      capabilities: buildCapabilities(),
+      initialModes: {
+        currentModeId: "auto",
+        availableModes: AVAILABLE_MODES,
       },
-    );
+    });
     const sessionId = await ctx.host.newSession();
     await expect(ctx.host.setMode(sessionId, "plan")).resolves.toBeUndefined();
   });
 
   test("after setMode, getModeState reflects the new currentModeId", async () => {
-    await using ctx = await connectMockHost(
-      {
-        initialModes: {
-          currentModeId: "auto",
-          availableModes: AVAILABLE_MODES,
-        },
+    await using ctx = await connectMockHost({
+      initialModes: {
+        currentModeId: "auto",
+        availableModes: AVAILABLE_MODES,
       },
-    );
+    });
     const sessionId = await ctx.host.newSession();
     await ctx.host.setMode(sessionId, "plan");
     const state = ctx.host.getModeState(sessionId);

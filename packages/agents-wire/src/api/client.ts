@@ -1,4 +1,3 @@
-import { enforceBudget } from "@/budget/guard";
 import { createCostTracker, type ICostTracker } from "@/budget/tracker";
 import { definitionFor } from "@/catalog/index";
 import { WireError } from "@/errors";
@@ -37,16 +36,25 @@ const mergeOptions = (defaults: IAskOptions, overrides: IAskOptions = {}): IAskO
   if (overrides.meta !== undefined && defaults.meta !== undefined) {
     merged.meta = { ...defaults.meta, ...overrides.meta };
   }
+  if (overrides.mcpServers !== undefined && defaults.mcpServers !== undefined) {
+    // Concat instead of replace so calling `client.with({ mcpServers: [extra] })`
+    // adds servers on top of the provider defaults. Override wins on name clash.
+    const byName = new Map(defaults.mcpServers.map((s) => [s.name, s]));
+    for (const s of overrides.mcpServers) {
+      byName.set(s.name, s);
+    }
+    merged.mcpServers = Array.from(byName.values());
+  }
   return merged;
 };
 
-const buildSchemaSystemPrompt = async <T>(schema: TSchemaInput<T>, base?: string): Promise<string> => {
+const buildSchemaSystemPrompt = async <T>(schema: TSchemaInput<T>, base?: string, onWarning?: (msg: string) => void): Promise<string> => {
   const guidance = base ?? DEFAULT_JSON_SYSTEM_PROMPT;
   if (typeof schema === "string") {
     return `${guidance}\n\nJSON Schema:\n${schema}`;
   }
   if (isStandardSchema(schema)) {
-    const derived = await standardSchemaToJsonSchema(schema);
+    const derived = await standardSchemaToJsonSchema(schema, onWarning);
     if (derived) {
       return `${guidance}\n\nJSON Schema:\n${derived}`;
     }
@@ -71,6 +79,7 @@ const runOneShot = async (agent: TAgentId, prompt: string, options: IAskOptions)
     ...(options.maxCostUsd !== undefined ? { budgetUsd: options.maxCostUsd } : {}),
     ...(options.costEstimator ? { estimator: options.costEstimator } : {}),
     ...(options.onCostUpdate ? { onUpdate: options.onCostUpdate } : {}),
+    ...(options.onWarning ? { onWarning: options.onWarning } : {}),
   });
   const stream = host.prompt(sessionId, {
     prompt,
@@ -82,12 +91,12 @@ const runOneShot = async (agent: TAgentId, prompt: string, options: IAskOptions)
   stream.completion.catch(() => {});
   for await (const event of stream) {
     if (event.type === "usage") {
+      // cost.record() throws BudgetExceededError when budgetUsd is set.
       cost.record(event.usage, agent, options.model);
-      enforceBudget({ tracker: cost, agent, ...(options.maxCostUsd !== undefined ? { maxCostUsd: options.maxCostUsd } : {}) });
     }
   }
   const result = await stream.completion;
-  options.onCostUpdate?.(cost.snapshot);
+  // Tracker's onUpdate already fired options.onCostUpdate per usage event.
   return { result: { ...result, cost: cost.snapshot }, cost };
 };
 
@@ -100,7 +109,10 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options: IAskOptions = {}): Promise<IJsonResult<T>> => {
     const merged = mergeOptions(defaults, options);
-    const systemPrompt = await buildSchemaSystemPrompt(schema, merged.systemPrompt);
+    // Always include DEFAULT_JSON_SYSTEM_PROMPT — caller's systemPrompt augments,
+    // never replaces, the JSON-formatting guidance the parser depends on.
+    const guidanceBase = merged.systemPrompt ? `${merged.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;
+    const systemPrompt = await buildSchemaSystemPrompt(schema, guidanceBase, merged.onWarning);
     const raw = await ask(prompt, { ...merged, systemPrompt });
     const data = await parseAndValidate<T>(raw.text, schema);
     return { data, raw };
@@ -113,6 +125,7 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
       ...(merged.maxCostUsd !== undefined ? { budgetUsd: merged.maxCostUsd } : {}),
       ...(merged.costEstimator ? { estimator: merged.costEstimator } : {}),
       ...(merged.onCostUpdate ? { onUpdate: merged.onCostUpdate } : {}),
+      ...(merged.onWarning ? { onWarning: merged.onWarning } : {}),
     });
 
     let upstreamCancel: () => Promise<void> = async () => {};
@@ -150,11 +163,6 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
         for await (const event of raw) {
           if (event.type === "usage") {
             cost.record(event.usage, agent, merged.model);
-            enforceBudget({
-              tracker: cost,
-              agent,
-              ...(merged.maxCostUsd !== undefined ? { maxCostUsd: merged.maxCostUsd } : {}),
-            });
           }
           eventQueue.push(event);
         }

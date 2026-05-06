@@ -40,7 +40,10 @@ describe("cancellation", () => {
         yield { type: "text-delta" as const, text: "partial", messageId: undefined };
         // Block until the signal fires
         try {
-          await waitForSignal(signal!);
+          if (!signal) {
+            throw new Error("mock host always supplies signal");
+          }
+          await waitForSignal(signal);
         } catch {
           // Signal aborted - stop generating
         }
@@ -55,7 +58,9 @@ describe("cancellation", () => {
     // Abort after a short delay
     setTimeout(() => controller.abort(), 20);
 
-    for await (const _ of stream) { /* drain until cancelled or done */ }
+    for await (const _ of stream) {
+      /* drain until cancelled or done */
+    }
     const result = await stream.completion;
 
     expect(result.stopReason).toBe("cancelled");
@@ -63,10 +68,14 @@ describe("cancellation", () => {
 
   test("stream.cancel() resolves and result has stopReason cancelled", async () => {
     await using ctx = await connectMockHost({
+      // biome-ignore lint/correctness/useYield: blocks on the cancel signal; never reaches a yield by design
       onPrompt: async function* (_sessionId, _blocks, signal) {
         // Block until cancelled
         try {
-          await waitForSignal(signal!);
+          if (!signal) {
+            throw new Error("mock host always supplies signal");
+          }
+          await waitForSignal(signal);
         } catch {
           // cancelled
         }
@@ -78,16 +87,22 @@ describe("cancellation", () => {
 
     setTimeout(() => void stream.cancel(), 20);
 
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
     expect(result.stopReason).toBe("cancelled");
   });
 
   test("host.cancel() on a session cancels the active prompt", async () => {
     await using ctx = await connectMockHost({
+      // biome-ignore lint/correctness/useYield: blocks on the cancel signal; never reaches a yield by design
       onPrompt: async function* (_sessionId, _blocks, signal) {
         try {
-          await waitForSignal(signal!);
+          if (!signal) {
+            throw new Error("mock host always supplies signal");
+          }
+          await waitForSignal(signal);
         } catch {
           // cancelled
         }
@@ -99,7 +114,9 @@ describe("cancellation", () => {
 
     setTimeout(() => void ctx.host.cancel(sessionId), 20);
 
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     const result = await stream.completion;
     expect(result.stopReason).toBe("cancelled");
   });
@@ -113,6 +130,7 @@ describe("cancellation", () => {
   test("pre-aborted signal does not invoke the agent prompt handler", async () => {
     let promptCalled = false;
     await using ctx = await connectMockHost({
+      // biome-ignore lint/correctness/useYield: this generator never yields by design — the test asserts the host short-circuits before invoking it
       onPrompt: function* (_sessionId, _blocks) {
         promptCalled = true;
       },
@@ -122,7 +140,9 @@ describe("cancellation", () => {
     controller.abort();
 
     const stream = ctx.host.prompt(sessionId, { prompt: "test", signal: controller.signal });
-    for await (const _ of stream) { /* drain */ }
+    for await (const _ of stream) {
+      /* drain */
+    }
     await stream.completion;
 
     // The agent-side prompt handler should not have been called
