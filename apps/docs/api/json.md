@@ -139,9 +139,23 @@ try {
 - `rawText: string` - the raw text that failed to parse or validate
 - `issues: ReadonlyArray<{ message?: string; path?: ReadonlyArray<string | number> }>` - structured validation issues
 
+## Per-vendor delivery
+
+`askJson` always returns a parsed, validated value. *How* the JSON is coerced
+out of the model differs by vendor:
+
+| Vendor | Channel | Reliability |
+|--------|---------|-------------|
+| `claude` | Strict CLI channel via `@pivanov/claude-wire` (`--tools StructuredOutput` + `--json-schema`) | Output is token-constrained by the model. Validation rarely fails on real prompts. |
+| All others | Prompt-injected JSON guidance + post-hoc parse + Standard Schema validate | Depends on the model. Fence stripping handles most markdown wrapping; non-conforming output throws `JsonValidationError`. |
+
+The Claude path is also `systemPrompt`-aware: pooled strict sessions when a
+`systemPrompt` is set (so it's prompt-cached across calls), stateless cold-spawn
+otherwise. See [Claude agent docs](/agents/claude#structured-json-askjson).
+
 ## Fence Stripping
 
-Agents sometimes wrap JSON in markdown fences (`` ```json ... ``` ``). `askJson` automatically strips these before parsing.
+Agents sometimes wrap JSON in markdown fences (`` ```json ... ``` ``). `askJson` automatically strips these before parsing on the soft (non-Claude) path.
 
 ## Options
 

@@ -17,3 +17,5 @@ apps/docs/.vitepress/dist/
 # README is copied from the monorepo root by `prepublishOnly`.
 packages/agents-wire/README.md
 .docs
+
+internal/

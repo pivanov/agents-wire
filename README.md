@@ -24,7 +24,7 @@ Local coding agents are powerful but awkward to drive programmatically. Each one
 
 - **Twelve agents, one API** - Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode, Factory Droid, Pi, Cline, Kilo, Qwen Code, Augment Code (Auggie)
 - **`ask` / `stream` / `session`** - one-shot, streaming async-iterable, multi-turn with shared subprocess
-- **`askJson` with Standard Schema** - Zod 4 / Valibot / ArkType auto-derived to JSON Schema, validated post-hoc
+- **`askJson` with Standard Schema** - Zod 4 / Valibot / ArkType auto-derived to JSON Schema. Strict CLI channel for Claude (via `@pivanov/claude-wire`), post-hoc validation for the rest.
 - **Cost tracker + budgets** - per-agent breakdown, runtime pricing table, auto-abort when over budget
 - **Tool middleware** - `allowed` / `blocked` / `onToolUse` decision pipeline plumbed through ACP permission requests
 - **Permission policies** - `auto-allow`, `auto-allow-once`, `auto-reject`, `stream` (HITL), or custom function

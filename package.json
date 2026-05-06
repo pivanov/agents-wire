@@ -30,5 +30,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@pivanov/claude-wire": "^0.2.0"
   }
 }

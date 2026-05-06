@@ -43,7 +43,7 @@ const r2 = await agents.ask(
 
 - **Twelve agents, one API** - Claude, Codex, Cursor, Copilot, Gemini, OpenCode, Droid, Pi, Cline, Kilo, Qwen, Auggie
 - **ask / stream / session** - one-shot, streaming async-iterable, multi-turn with shared subprocess
-- **askJson with Standard Schema** - Zod / Valibot / ArkType, validated post-hoc
+- **askJson with Standard Schema** - Zod / Valibot / ArkType. Strict CLI channel for Claude (via `@pivanov/claude-wire`), post-hoc validation elsewhere.
 - **Cost tracker and budgets** - per-agent breakdown, runtime pricing, auto-abort on overspend
 - **Tool middleware** - allowed / blocked / onToolUse pipeline through ACP permission requests
 - **Orchestration** - failover / race / cascade / pool for multi-agent workflows

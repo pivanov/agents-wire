@@ -1,5 +1,29 @@
 # @pivanov/agents-wire
 
+## 0.1.0
+
+### Minor Changes
+
+- Route `agents.askJson("claude", ...)` and `session.askJson` for the Claude
+  agent through `@pivanov/claude-wire` 0.2.0's strict CLI channel
+  (`--tools StructuredOutput` + `--json-schema`). Output is token-constrained
+  by the model rather than only validated after the fact. Replaces the
+  prompt-injection + post-hoc-validate path which was unreliable on real
+  enrichment prompts (an internal parity harness measured 0% success on the
+  soft path vs 100% on the strict path for Haiku TL;DR / triage / rerank).
+
+  Routing is `systemPrompt`-aware: with a `systemPrompt` set, the delegate
+  pools strict sessions keyed by `(systemPrompt, schema fingerprint)` so the
+  prefix is Anthropic-prompt-cached across distinct schemas in the same
+  session; without `systemPrompt`, it falls back to claude-wire stateless
+  `claude.askJson` because pooling without a cached prefix accumulates
+  per-turn context and grows per-call cost.
+
+  Other vendors are unchanged — they keep the prompt-injected JSON guidance
+  and post-hoc Standard Schema validation.
+
+  Adds `@pivanov/claude-wire ^0.2.0` to dependencies.
+
 ## 0.0.5
 
 Pre-publish hardening pass. A few new opt-in fields on existing

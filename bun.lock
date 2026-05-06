@@ -3,6 +3,9 @@
   "configVersion": 1,
   "workspaces": {
     "": {
+      "dependencies": {
+        "@pivanov/claude-wire": "^0.2.0",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.4.14",
         "@changesets/changelog-github": "^0.6.0",
@@ -71,7 +74,7 @@
     },
     "packages/agents-wire": {
       "name": "@pivanov/agents-wire",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "bin": {
         "agents-wire": "./dist/cli.mjs",
       },
@@ -79,6 +82,7 @@
         "@agentclientprotocol/claude-agent-acp": "^0.32.0",
         "@agentclientprotocol/sdk": "^0.21.0",
         "@ai-sdk/provider": "^3.0.10",
+        "@pivanov/claude-wire": "^0.2.0",
         "@zed-industries/codex-acp": "^0.13.0",
         "zod": "^4.4.3",
       },
@@ -465,6 +469,8 @@
     "@pivanov/agents-wire-example-research": ["@pivanov/agents-wire-example-research@workspace:apps/examples/research-agent"],
 
     "@pivanov/agents-wire-playground": ["@pivanov/agents-wire-playground@workspace:apps/playground"],
+
+    "@pivanov/claude-wire": ["@pivanov/claude-wire@0.2.0", "", { "bin": { "claude-wire": "dist/cli.js" } }, "sha512-eEv9GU/ZdgNIo0uHy+RQXkiFjxT2oL6OhFmhQXtv4qS2mo6S4YEVPkq1Rn0gm4aQnsYbaX5ZjjRMZdK0o59d/w=="],
 
     "@resvg/resvg-js": ["@resvg/resvg-js@2.6.2", "", { "optionalDependencies": { "@resvg/resvg-js-android-arm-eabi": "2.6.2", "@resvg/resvg-js-android-arm64": "2.6.2", "@resvg/resvg-js-darwin-arm64": "2.6.2", "@resvg/resvg-js-darwin-x64": "2.6.2", "@resvg/resvg-js-linux-arm-gnueabihf": "2.6.2", "@resvg/resvg-js-linux-arm64-gnu": "2.6.2", "@resvg/resvg-js-linux-arm64-musl": "2.6.2", "@resvg/resvg-js-linux-x64-gnu": "2.6.2", "@resvg/resvg-js-linux-x64-musl": "2.6.2", "@resvg/resvg-js-win32-arm64-msvc": "2.6.2", "@resvg/resvg-js-win32-ia32-msvc": "2.6.2", "@resvg/resvg-js-win32-x64-msvc": "2.6.2" } }, "sha512-xBaJish5OeGmniDj9cW5PRa/PtmuVU3ziqrbr5xJj901ZDN4TosrVaNZpEiLZAxdfnhAe7uQ7QFWfjPe9d9K2Q=="],
 

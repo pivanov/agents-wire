@@ -4,6 +4,7 @@ import { definitionFor } from "@/catalog/index";
 import { DEFAULT_MAX_TURNS_BEFORE_RECYCLE, MAX_RESPAWN_ATTEMPTS, RESPAWN_BACKOFF_MS } from "@/constants";
 import { AgentConnectionClosedError, BudgetExceededError, isTransientError, WireError } from "@/errors";
 import { createAsyncQueue } from "@/internal/async-queue";
+import { createClaudeDelegatePool, delegateAskJson, type IClaudeDelegatePool } from "@/runtime/claude-delegate";
 import type { IHostStream, IWireHost } from "@/runtime/host";
 import { createWireHost } from "@/runtime/host";
 import { standardSchemaToJsonSchema } from "@/schema/derive";
@@ -104,6 +105,12 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
   });
 
   let closed = false;
+
+  // Claude session.askJson delegates to claude-wire's strict CLI channel.
+  // Pool is per agents-wire session so closing the agents-wire session closes
+  // the underlying claude-wire sessions deterministically. Lazily created
+  // because non-Claude sessions never use it.
+  let claudeDelegatePool: IClaudeDelegatePool | undefined;
 
   // Per-host-lifetime turn counter - resets on recycle (not on failure respawn).
   let turnCount = 0;
@@ -331,6 +338,21 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, askOptions: IAskOptions = {}): Promise<IJsonResult<T>> => {
     const merged: IAskOptions = { ...options, ...askOptions };
+    // Claude routes through claude-wire's strict CLI channel. With a
+    // systemPrompt, the per-session pool keys by (systemPrompt, schema-fp)
+    // so the systemPrompt is Anthropic-prompt-cached across distinct schemas
+    // in this agents-wire session. Without a systemPrompt, falls through to
+    // claude-wire stateless (sessions accumulate context, so pooling is a
+    // cost loss without a cached prefix).
+    if (agent === "claude") {
+      if (merged.systemPrompt !== undefined && merged.systemPrompt.length > 0) {
+        if (claudeDelegatePool === undefined) {
+          claudeDelegatePool = createClaudeDelegatePool();
+        }
+        return claudeDelegatePool.askJson(prompt, schema, merged, merged.systemPrompt);
+      }
+      return delegateAskJson(prompt, schema, merged);
+    }
     // Always include DEFAULT_JSON_SYSTEM_PROMPT — caller's systemPrompt augments,
     // never replaces, the JSON-formatting guidance the parser depends on.
     const guidanceBase = merged.systemPrompt ? `${merged.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;
@@ -387,6 +409,14 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
       await inFlight;
     } catch {
       /* in-flight op was cancelled by host.close; that's the contract */
+    }
+    if (claudeDelegatePool !== undefined) {
+      try {
+        await claudeDelegatePool.close();
+      } catch {
+        // best-effort
+      }
+      claudeDelegatePool = undefined;
     }
   };
 

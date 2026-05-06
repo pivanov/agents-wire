@@ -2,6 +2,7 @@ import { createCostTracker, type ICostTracker } from "@/budget/tracker";
 import { definitionFor } from "@/catalog/index";
 import { WireError } from "@/errors";
 import { createAsyncQueue } from "@/internal/async-queue";
+import { delegateAskJson } from "@/runtime/claude-delegate";
 import { createWireHost } from "@/runtime/host";
 import { standardSchemaToJsonSchema } from "@/schema/derive";
 import { parseAndValidate } from "@/schema/parse";
@@ -109,6 +110,13 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options: IAskOptions = {}): Promise<IJsonResult<T>> => {
     const merged = mergeOptions(defaults, options);
+    // Claude routes through claude-wire's strict CLI channel
+    // (--tools StructuredOutput + --json-schema). The generic ACP soft path
+    // below is 0% reliable on real Haiku enrichment prompts; see the parity
+    // harness in internal/parity-harness/ for numbers.
+    if (agent === "claude") {
+      return delegateAskJson(prompt, schema, merged);
+    }
     // Always include DEFAULT_JSON_SYSTEM_PROMPT — caller's systemPrompt augments,
     // never replaces, the JSON-formatting guidance the parser depends on.
     const guidanceBase = merged.systemPrompt ? `${merged.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;

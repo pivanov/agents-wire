@@ -88,12 +88,38 @@ advertises in `session.configOptions`).
 | Feature | Supported |
 |---------|-----------|
 | `ask` / `stream` / `session` | ✅ |
-| `askJson` | ✅ |
+| `askJson` | ✅ (strict — see below) |
 | MCP stdio | ✅ |
 | MCP http/sse | ✅ |
 | Session listing (`listSessions`) | ✅ |
 | Tool call interception | ✅ |
 | Thinking/extended reasoning | ✅ (model-dependent) |
+
+## Structured JSON (`askJson`)
+
+For Claude, `agents.askJson("claude", ...)` and `session.askJson` route through
+`@pivanov/claude-wire` (a Claude-only specialist) so the spawned `claude` process
+gets `--tools StructuredOutput` and `--json-schema` at the CLI level. Output is
+token-constrained by the model, not just validated after the fact.
+
+This is different from how `askJson` works for other vendors, which inject a
+JSON-formatting system prompt and parse-then-validate the response. The Claude
+strict path is essentially perfect on real prompts; the soft path is not. See
+the [`askJson` docs](/api/json) for the per-vendor breakdown.
+
+Routing is `systemPrompt`-aware:
+
+- **With `systemPrompt`** → a pooled strict session keyed by `(systemPrompt,
+  schema fingerprint)`. The systemPrompt is Anthropic-prompt-cached across
+  distinct schemas in the same session, so per-call cost drops to the diff.
+  Use this for high-volume enrichments where a project catalog or preamble is
+  shared across calls.
+- **Without `systemPrompt`** → claude-wire stateless `claude.askJson` (cold
+  spawn per call). Sessions accumulate per-turn context, so pooling without a
+  cached prefix is a cost loss; the delegate routes around it.
+
+`@pivanov/claude-wire` ships as a regular dependency of `agents-wire` — no
+extra install step.
 
 ## Cost Tracking
 
