@@ -249,7 +249,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
   </g>
 
   <!-- Accent orb -->
-  <circle cx="${ORB_CX}" cy="${ORB_CY}" r="32" fill="url(#accentRibbon)" opacity="0.22" filter="url(#orbBloom)"/>
+  <circle cx="${ORB_CX}" cy="${ORB_CY}" r="32" fill="url(#orbJewel)" opacity="0.22" filter="url(#orbBloom)"/>
   <circle cx="${ORB_CX}" cy="${ORB_CY}" r="11.5" fill="none" stroke="url(#orbRing)" stroke-width="1.4" opacity="0.85"/>
   <circle cx="${ORB_CX}" cy="${ORB_CY}" r="6.5" fill="url(#orbJewel)"/>
 </svg>`;

@@ -43,6 +43,7 @@ const queryOsc11 = (): Promise<TThemeId | undefined> => {
   }
   const stdin = process.stdin;
   const wasRaw = stdin.isRaw;
+  const wasPaused = stdin.isPaused();
   return new Promise((resolve) => {
     let buffer = "";
     let settled = false;
@@ -55,7 +56,9 @@ const queryOsc11 = (): Promise<TThemeId | undefined> => {
       } catch {
         /* ignore */
       }
-      stdin.pause();
+      if (wasPaused) {
+        stdin.pause();
+      }
     };
     const finish = (value: TThemeId | undefined): void => {
       if (settled) {

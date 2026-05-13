@@ -5,7 +5,8 @@
  * pathway by extracting the core mutation logic as a pure function.
  */
 import { describe, expect, test } from "bun:test";
-import type { SessionModeState } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
+import { connectMockHost } from "@/testing/mock-host";
 
 // ─── helper: inline the mutation logic from handleSessionUpdate ──────────────
 
@@ -17,7 +18,10 @@ const applyModeUpdate = (
   currentModeState: SessionModeState | undefined,
   update: { sessionUpdate: string; currentModeId?: string },
 ): SessionModeState | undefined => {
-  if (update.sessionUpdate === "current_mode_update" && currentModeState) {
+  if (update.sessionUpdate === "current_mode_update" && update.currentModeId !== undefined) {
+    if (!currentModeState) {
+      return { availableModes: [], currentModeId: update.currentModeId };
+    }
     return { ...currentModeState, currentModeId: update.currentModeId ?? currentModeState.currentModeId };
   }
   return currentModeState;
@@ -50,12 +54,12 @@ describe("mode state tracking", () => {
     expect(updated?.availableModes).toEqual(baseModeState.availableModes);
   });
 
-  test("returns undefined gracefully when modeState is undefined", () => {
+  test("seeds currentModeId when modeState is undefined", () => {
     const updated = applyModeUpdate(undefined, {
       sessionUpdate: "current_mode_update",
       currentModeId: "plan",
     });
-    expect(updated).toBeUndefined();
+    expect(updated).toEqual({ availableModes: [], currentModeId: "plan" });
   });
 
   test("does not mutate modeState for unrelated session updates", () => {
@@ -87,5 +91,48 @@ describe("mode state tracking", () => {
     });
 
     expect(getModeState("sess-1")?.currentModeId).toBe("plan");
+  });
+
+  test("host seeds modeState from current_mode_update when initial modes are absent", async () => {
+    await using ctx = await connectMockHost({
+      onPrompt: async function* () {
+        yield { type: "mode-changed", modeId: "plan" };
+      },
+    });
+    const sessionId = await ctx.host.newSession();
+    const stream = ctx.host.prompt(sessionId, { prompt: "hello" });
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(ctx.host.getModeState(sessionId)).toEqual({ availableModes: [], currentModeId: "plan" });
+  });
+
+  test("host persists config options from config_option_update", async () => {
+    const options: readonly SessionConfigOption[] = [
+      {
+        type: "select",
+        id: "model",
+        name: "Model",
+        category: "model",
+        currentValue: "haiku",
+        options: [
+          { value: "default", name: "Default" },
+          { value: "haiku", name: "Haiku" },
+        ],
+      },
+    ];
+    await using ctx = await connectMockHost({
+      onPrompt: async function* () {
+        yield { type: "config-options", options };
+      },
+    });
+    const sessionId = await ctx.host.newSession();
+    const stream = ctx.host.prompt(sessionId, { prompt: "hello" });
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(ctx.host.getConfigOptions(sessionId)).toEqual(options);
   });
 });

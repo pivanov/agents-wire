@@ -184,25 +184,51 @@ export interface IClaudeDelegatePool {
 
 export const createClaudeDelegatePool = (): IClaudeDelegatePool => {
   const sessions = new Map<string, IClaudeSession>();
+  const inflight = new Map<string, Promise<IClaudeSession>>();
+  let closed = false;
 
   const acquire = async <T>(schema: TSchemaInput<T>, options: IAskOptions, systemPrompt: string): Promise<IClaudeSession> => {
+    if (closed) {
+      throw new WireError("connection-closed", "Claude delegate pool is closed", { agent: "claude" });
+    }
     const fp = await fingerprintSchema(schema);
-    const key = `${hash(systemPrompt)}::${fp}`;
+    const key = hash(JSON.stringify([systemPrompt, fp, options.cwd ?? "", options.model ?? ""]));
     const existing = sessions.get(key);
     if (existing !== undefined) {
       return existing;
     }
-    const jsonSchema = typeof schema === "string" ? schema : await deriveJsonSchema(schema as IClaudeStandardSchema<T>);
-    if (jsonSchema === undefined) {
-      throw new WireError("stream-error", "Could not derive JSON Schema from input", { agent: "claude" });
+    const pending = inflight.get(key);
+    if (pending !== undefined) {
+      return pending;
     }
-    const session = createClaudeSession({
-      ...buildAskOpts(options),
-      jsonSchema,
-      systemPrompt,
-    });
-    sessions.set(key, session);
-    return session;
+    const pendingSession = (async (): Promise<IClaudeSession> => {
+      const jsonSchema = typeof schema === "string" ? schema : await deriveJsonSchema(schema as IClaudeStandardSchema<T>);
+      if (jsonSchema === undefined) {
+        throw new WireError("stream-error", "Could not derive JSON Schema from input", { agent: "claude" });
+      }
+      const session = createClaudeSession({
+        ...buildAskOpts(options),
+        jsonSchema,
+        systemPrompt,
+      });
+      if (closed) {
+        await session.close();
+        throw new WireError("connection-closed", "Claude delegate pool is closed", { agent: "claude" });
+      }
+      sessions.set(key, session);
+      return session;
+    })();
+    inflight.set(key, pendingSession);
+    try {
+      return await pendingSession;
+    } catch (err) {
+      inflight.delete(key);
+      throw err;
+    } finally {
+      if (inflight.get(key) === pendingSession) {
+        inflight.delete(key);
+      }
+    }
   };
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options: IAskOptions, systemPrompt: string): Promise<IJsonResult<T>> => {
@@ -221,8 +247,17 @@ export const createClaudeDelegatePool = (): IClaudeDelegatePool => {
   };
 
   const close = async (): Promise<void> => {
-    const all = Array.from(sessions.values());
+    closed = true;
+    const pending = Array.from(inflight.values());
+    inflight.clear();
+    const settled = await Promise.allSettled(pending);
+    const all = new Set<IClaudeSession>(sessions.values());
     sessions.clear();
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        all.add(result.value);
+      }
+    }
     for (const session of all) {
       try {
         await session.close();

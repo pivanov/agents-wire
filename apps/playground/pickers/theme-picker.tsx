@@ -56,6 +56,10 @@ export const ThemePicker = ({ onResolve }: IProps) => {
   const { setPreview, savePreview, cancelPreview } = useThemePreview();
 
   useEffect(() => {
+    return (): void => cancelPreview();
+  }, [cancelPreview]);
+
+  useEffect(() => {
     setCursor(Math.max(0, THEME_IDS.indexOf(committedId)));
   }, [committedId]);
 

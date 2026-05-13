@@ -62,7 +62,7 @@ const openSelector = <T extends string>(
     readonly onPick: (id: T) => void | Promise<void>;
   },
 ): Promise<void> =>
-  new Promise<void>((resolve) => {
+  new Promise<void>((resolve, reject) => {
     const node: ReactNode = (
       <SelectPicker<T>
         title={args.title}
@@ -72,7 +72,7 @@ const openSelector = <T extends string>(
         onResolve={(picked) => {
           app.closeDialog();
           if (picked !== undefined) {
-            void Promise.resolve(args.onPick(picked)).then(resolve);
+            void Promise.resolve(args.onPick(picked)).then(resolve, reject);
             return;
           }
           resolve();

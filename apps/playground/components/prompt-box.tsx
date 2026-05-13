@@ -29,6 +29,7 @@ interface IProps {
   readonly onAtComplete?: () => void;
   readonly onAtSubmit?: () => string | null;
   readonly transformPaste?: (text: string) => TPasteResult | Promise<TPasteResult>;
+  readonly onPasteError?: (error: unknown) => void;
 }
 
 // Terminal raw mode + extended-key escapes are owned by the App via
@@ -406,6 +407,7 @@ export const PromptBox = (props: IProps) => {
     onAtComplete,
     onAtSubmit,
     transformPaste,
+    onPasteError,
   } = props;
 
   const refRawBuffer = useRef<string>("");
@@ -416,6 +418,7 @@ export const PromptBox = (props: IProps) => {
   const refLastCtrlCAt = useRef<number>(0);
   const refLastEscAt = useRef<number>(0);
   const refExitTimer = useRef<NodeJS.Timeout | null>(null);
+  const refMounted = useRef<boolean>(true);
   // Chip side-table: `[Image #N]` placeholders in the buffer point to
   // these absolute paths. Cleared on submit; orphan entries get evicted
   // when the user backspaces a chip so we never leak stale paths into
@@ -629,7 +632,17 @@ export const PromptBox = (props: IProps) => {
           }
           const transformed = transformPaste(ev.text);
           if (transformed instanceof Promise) {
-            transformed.then(apply).catch(() => {});
+            transformed
+              .then((result) => {
+                if (refMounted.current) {
+                  apply(result);
+                }
+              })
+              .catch((cause: unknown) => {
+                if (refMounted.current) {
+                  onPasteError?.(cause);
+                }
+              });
             continue;
           }
           apply(transformed);
@@ -796,6 +809,7 @@ export const PromptBox = (props: IProps) => {
       onAtComplete,
       onAtSubmit,
       transformPaste,
+      onPasteError,
       setBoth,
       showExitHint,
       softDisabled,
@@ -849,6 +863,7 @@ export const PromptBox = (props: IProps) => {
 
   useEffect(() => {
     return (): void => {
+      refMounted.current = false;
       if (refExitTimer.current !== null) {
         clearTimeout(refExitTimer.current);
         refExitTimer.current = null;

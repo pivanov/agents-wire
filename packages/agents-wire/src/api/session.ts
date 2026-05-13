@@ -50,19 +50,28 @@ export const computeBackoffMs = (attempt: number): number => {
 
 const consumeStream = async (raw: IHostStream, cost: ICostTracker, agent: TAgentId, model: string | undefined): Promise<IAskResult> => {
   raw.completion.catch(() => {});
-  for await (const event of raw) {
-    if (event.type === "usage") {
-      // cost.record() throws BudgetExceededError when budgetUsd is set;
-      // no separate enforceBudget needed.
-      cost.record(event.usage, agent, model);
+  try {
+    for await (const event of raw) {
+      if (event.type === "usage") {
+        // cost.record() throws BudgetExceededError when budgetUsd is set;
+        // no separate enforceBudget needed.
+        cost.record(event.usage, agent, model);
+      }
     }
+    const result = await raw.completion;
+    // No manual onCostUpdate fire here — the tracker is built with
+    // `onUpdate: options.onCostUpdate`, so `cost.record(...)` above already
+    // fired the user callback on every usage event including the final one.
+    // A second post-loop call would double-fire with identical totals.
+    return { ...result, cost: cost.snapshot };
+  } catch (err) {
+    try {
+      await raw.cancel();
+    } catch {
+      /* swallow cancel-on-error */
+    }
+    throw err;
   }
-  const result = await raw.completion;
-  // No manual onCostUpdate fire here — the tracker is built with
-  // `onUpdate: options.onCostUpdate`, so `cost.record(...)` above already
-  // fired the user callback on every usage event including the final one.
-  // A second post-loop call would double-fire with identical totals.
-  return { ...result, cost: cost.snapshot };
 };
 
 const buildSchemaSystemPrompt = async <T>(schema: TSchemaInput<T>, base: string | undefined, onWarning?: (msg: string) => void): Promise<string> => {
@@ -318,6 +327,11 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
         return { ...result, cost: cost.snapshot };
       } catch (err) {
         events.fail(err);
+        try {
+          await raw.cancel();
+        } catch {
+          /* swallow cancel-on-error */
+        }
         throw err;
       }
     })();
@@ -356,7 +370,7 @@ export const createSession = async (agent: TAgentId, options: ISessionOptions = 
     // Always include DEFAULT_JSON_SYSTEM_PROMPT — caller's systemPrompt augments,
     // never replaces, the JSON-formatting guidance the parser depends on.
     const guidanceBase = merged.systemPrompt ? `${merged.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;
-    const systemPrompt = await buildSchemaSystemPrompt(schema, guidanceBase, options.onWarning);
+    const systemPrompt = await buildSchemaSystemPrompt(schema, guidanceBase, merged.onWarning);
     const raw = await ask(prompt, { ...merged, systemPrompt });
     const data = await parseAndValidate<T>(raw.text, schema);
     return { data, raw };

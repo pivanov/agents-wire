@@ -40,7 +40,12 @@ export const detectAvailableAgents = async (): Promise<readonly IDetectionEntry[
   const definitions = listDefinitions();
   const probed = await Promise.all(
     definitions.map(async (definition) => {
-      const outcome = await runProbe(definition);
+      let outcome: IProbeOutcome;
+      try {
+        outcome = await runProbe(definition);
+      } catch (cause) {
+        outcome = { available: false, reason: cause instanceof Error ? cause.message : String(cause) };
+      }
       const entry: IDetectionEntry =
         outcome.reason !== undefined
           ? { id: definition.id, label: definition.label, available: outcome.available, reason: outcome.reason }

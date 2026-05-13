@@ -1,5 +1,5 @@
 import { type Key, useInput } from "ink";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 type TInputHandler = (input: string, key: Key) => void;
 
@@ -13,7 +13,7 @@ interface IOptions {
 // the latest closure (refreshed in a layout effect each render).
 export const useStableInput = (handler: TInputHandler, options: IOptions = {}): void => {
   const ref = useRef<TInputHandler>(handler);
-  useEffect(() => {
+  useLayoutEffect(() => {
     ref.current = handler;
   });
   useInput(

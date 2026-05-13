@@ -145,14 +145,21 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
     let textOpen = false;
     let reasoningOpen = false;
     const toolNameById = new Map<string, string>();
+    let consumerCancelled = false;
+    let cancelStream: (() => Promise<void>) | undefined;
+    const cancelUpstream = async (): Promise<void> => {
+      consumerCancelled = true;
+      try {
+        await cancelStream?.();
+      } catch {
+        /* swallow cancel-on-consumer-close */
+      }
+    };
 
     void (async () => {
-      let cancelStream: (() => Promise<void>) | undefined;
       const onAbort = (): void => {
         partQueue.fail(options.abortSignal?.reason ?? new WireError("cancelled", "stream aborted"));
-        if (cancelStream) {
-          void cancelStream();
-        }
+        void cancelUpstream();
       };
       if (options.abortSignal) {
         if (options.abortSignal.aborted) {
@@ -164,12 +171,19 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
       try {
         partQueue.push({ type: "stream-start", warnings });
         partQueue.push({ type: "response-metadata", id: session.sessionId });
+        if (consumerCancelled) {
+          return;
+        }
         const stream = session.stream(userText, {
           ...(systemPrompt ? { systemPrompt } : {}),
           ...(options.abortSignal ? { signal: options.abortSignal } : {}),
           ...(command ? { command } : {}),
         });
         cancelStream = stream.cancel;
+        if (consumerCancelled) {
+          await stream.cancel();
+          return;
+        }
         for await (const event of stream) {
           if (event.type === "text-delta") {
             if (!textOpen) {
@@ -263,6 +277,11 @@ const buildSessionModel = (agent: TAgentId, session: IAgentSession, sessionOptio
           return;
         }
         controller.enqueue(next.value);
+      },
+      async cancel() {
+        consumerCancelled = true;
+        await iterator.return?.();
+        await cancelUpstream();
       },
     });
 

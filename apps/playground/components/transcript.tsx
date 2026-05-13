@@ -327,6 +327,7 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
   const refDebounceTimer = useRef<NodeJS.Timeout | null>(null);
   const refRowId = useRef<number>(0);
   const refRunningTools = useRef<Set<string>>(new Set());
+  const refCommitted = useRef<TCommittedRow[]>([]);
 
   const [frozen, setFrozen] = useState<TFrozenRow[]>([]);
   const [committed, setCommitted] = useState<TCommittedRow[]>([]);
@@ -368,6 +369,12 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
     return refRowId.current;
   }, []);
 
+  const updateCommitted = useCallback((updater: (prev: TCommittedRow[]) => TCommittedRow[]): void => {
+    const next = updater(refCommitted.current);
+    refCommitted.current = next;
+    setCommitted(next);
+  }, []);
+
   const appendFrozen = useCallback((row: TFrozenRow): void => {
     setFrozen((prev) => [...prev, row]);
   }, []);
@@ -379,7 +386,7 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
   const appendCommitted = useCallback(
     (row: TCommittedRow): void => {
       if (row.kind === "tool") {
-        setCommitted((prev) => {
+        updateCommitted((prev) => {
           if (prev.length < MAX_COMMITTED_ROWS) {
             return [...prev, row];
           }
@@ -390,7 +397,7 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
       // Stable kinds skip the dynamic array entirely.
       appendFrozen(row as TFrozenRow);
     },
-    [appendFrozen],
+    [appendFrozen, updateCommitted],
   );
 
   // Migrate any tool rows still sitting in `committed` into <Static>
@@ -398,51 +405,50 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
   // on user-input so the user can keep toggling Ctrl+O on the just-
   // finished turn's tools until they start a new prompt.
   const flushPendingToFrozen = useCallback((): void => {
-    setCommitted((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-      const tools = prev.filter((r): r is Extract<TCommittedRow, { kind: "tool" }> => r.kind === "tool");
-      if (tools.length === 0) {
-        return prev;
-      }
-      setFrozen((f) => {
-        const baked: TFrozenRow[] = tools.map((row) => {
-          const status = refToolStatuses.current.get(row.toolId) ?? "unknown";
-          const output = refToolOutputs.current.get(row.toolId);
-          return output !== undefined
-            ? { ...row, bakedStatus: status, bakedOutput: output, bakedVerbose: refVerbose.current }
-            : { ...row, bakedStatus: status, bakedVerbose: refVerbose.current };
-        });
-        return [...f, ...baked];
-      });
-      // Drop the migrated tool ids from the live status / output maps
-      // so they don't leak.
-      setToolStatuses((m) => {
-        let n: Map<string, "ok" | "error" | "unknown"> | null = null;
-        for (const t of tools) {
-          if (m.has(t.toolId)) {
-            if (n === null) {
-              n = new Map(m);
-            }
-            n.delete(t.toolId);
+    const prev = refCommitted.current;
+    if (prev.length === 0) {
+      return;
+    }
+    const tools = prev.filter((r): r is Extract<TCommittedRow, { kind: "tool" }> => r.kind === "tool");
+    if (tools.length === 0) {
+      return;
+    }
+    const baked: TFrozenRow[] = tools.map((row) => {
+      const status = refToolStatuses.current.get(row.toolId) ?? "unknown";
+      const output = refToolOutputs.current.get(row.toolId);
+      return output !== undefined
+        ? { ...row, bakedStatus: status, bakedOutput: output, bakedVerbose: refVerbose.current }
+        : { ...row, bakedStatus: status, bakedVerbose: refVerbose.current };
+    });
+    const nextCommitted = prev.filter((r) => r.kind !== "tool");
+    refCommitted.current = nextCommitted;
+    setCommitted(nextCommitted);
+    setFrozen((f) => [...f, ...baked]);
+    // Drop the migrated tool ids from the live status / output maps
+    // so they don't leak.
+    setToolStatuses((m) => {
+      let n: Map<string, "ok" | "error" | "unknown"> | null = null;
+      for (const t of tools) {
+        if (m.has(t.toolId)) {
+          if (n === null) {
+            n = new Map(m);
           }
+          n.delete(t.toolId);
         }
-        return n ?? m;
-      });
-      setToolOutputs((m) => {
-        let n: Map<string, unknown> | null = null;
-        for (const t of tools) {
-          if (m.has(t.toolId)) {
-            if (n === null) {
-              n = new Map(m);
-            }
-            n.delete(t.toolId);
+      }
+      return n ?? m;
+    });
+    setToolOutputs((m) => {
+      let n: Map<string, unknown> | null = null;
+      for (const t of tools) {
+        if (m.has(t.toolId)) {
+          if (n === null) {
+            n = new Map(m);
           }
+          n.delete(t.toolId);
         }
-        return n ?? m;
-      });
-      return prev.filter((r) => r.kind !== "tool");
+      }
+      return n ?? m;
     });
   }, []);
 
@@ -631,6 +637,7 @@ const TranscriptImpl = ({ cols, handleRef, cancelling = false }: IProps) => {
             setRunPending(false);
             setToolStatuses(new Map());
             setToolOutputs(new Map());
+            refCommitted.current = [];
             setCommitted([]);
             // Reset frozen too. Past <Static> rows already in terminal
             // scrollback stay there - we can't unwind them and don't

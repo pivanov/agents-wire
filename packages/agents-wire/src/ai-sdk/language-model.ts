@@ -176,6 +176,7 @@ export const createAgentLanguageModel = (agentId: TAgentId, settings: IAgentOpti
         ...(merged.systemPrompt ? { systemPrompt: merged.systemPrompt } : {}),
         ...(options.abortSignal ? { signal: options.abortSignal } : {}),
         ...(command ? { command } : {}),
+        ...(merged.meta ? { meta: merged.meta } : {}),
       });
       stream.completion.catch(() => {});
       for await (const event of stream) {
@@ -221,19 +222,28 @@ export const createAgentLanguageModel = (agentId: TAgentId, settings: IAgentOpti
     let textOpen = false;
     let reasoningOpen = false;
     const toolNameById = new Map<string, string>();
+    let consumerCancelled = false;
+    let host: IWireHost | undefined;
+    let cancelStream: (() => Promise<void>) | undefined;
+    const cancelUpstream = async (): Promise<void> => {
+      consumerCancelled = true;
+      try {
+        if (cancelStream) {
+          await cancelStream();
+        } else {
+          await host?.close();
+        }
+      } catch {
+        /* swallow cancel-on-consumer-close */
+      }
+    };
 
     void (async () => {
-      let host: IWireHost | undefined;
-      let cancelStream: (() => Promise<void>) | undefined;
       const onAbort = (): void => {
         partQueue.fail(options.abortSignal?.reason ?? new WireError("cancelled", "stream aborted"));
         // If abort fires before stream.cancel is wired, fall back to closing
         // the host so the spawned process doesn't outlive the consumer.
-        if (cancelStream) {
-          void cancelStream();
-        } else {
-          void host?.close();
-        }
+        void cancelUpstream();
       };
       if (options.abortSignal) {
         if (options.abortSignal.aborted) {
@@ -250,6 +260,9 @@ export const createAgentLanguageModel = (agentId: TAgentId, settings: IAgentOpti
         const definition = resolveDefinition();
         const setup = await bootstrap(definition, agentId, merged);
         host = setup.host;
+        if (consumerCancelled) {
+          return;
+        }
         partQueue.push({ type: "stream-start", warnings });
         partQueue.push({ type: "response-metadata", id: setup.sessionId });
         const stream = host.prompt(setup.sessionId, {
@@ -257,8 +270,13 @@ export const createAgentLanguageModel = (agentId: TAgentId, settings: IAgentOpti
           ...(merged.systemPrompt ? { systemPrompt: merged.systemPrompt } : {}),
           ...(options.abortSignal ? { signal: options.abortSignal } : {}),
           ...(command ? { command } : {}),
+          ...(merged.meta ? { meta: merged.meta } : {}),
         });
         cancelStream = stream.cancel;
+        if (consumerCancelled) {
+          await stream.cancel();
+          return;
+        }
         stream.completion.catch(() => {});
         for await (const event of stream) {
           dispatch(event, partQueue, {
@@ -331,6 +349,11 @@ export const createAgentLanguageModel = (agentId: TAgentId, settings: IAgentOpti
           return;
         }
         controller.enqueue(next.value);
+      },
+      async cancel() {
+        consumerCancelled = true;
+        await iterator.return?.();
+        await cancelUpstream();
       },
     });
 

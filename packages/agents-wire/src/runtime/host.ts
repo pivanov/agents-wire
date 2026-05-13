@@ -392,25 +392,35 @@ export const createWireHost = async (definition: IAgentDefinition, options: IWir
   const handleSessionUpdate = (notification: SessionNotification): void => {
     const sessionId = notification.sessionId as SessionId;
     const record = sessions.get(sessionId);
-    if (!record?.active) {
+    if (!record) {
       return;
     }
     const update = notification.update;
     if (update.sessionUpdate === "available_commands_update") {
       record.availableCommands = toAvailableCommands(update.availableCommands);
     }
-    if (update.sessionUpdate === "current_mode_update" && record.modeState) {
+    if (update.sessionUpdate === "config_option_update") {
+      const configOptions = update.configOptions ?? [];
+      record.configOptions = configOptions.length > 0 ? configOptions : undefined;
+    }
+    if (update.sessionUpdate === "current_mode_update") {
       // Dedupe: setMode() pushes a mode-changed event eagerly when its
       // RPC returns. Some agents also acknowledge by sending a
       // current_mode_update notification immediately after — without
       // this guard the consumer would observe the same logical change
       // twice. Skip the translate() push when the modeId already matches
       // what we last applied.
-      if (record.modeState.currentModeId === update.currentModeId) {
+      if (!record.modeState) {
+        record.modeState = { availableModes: [], currentModeId: update.currentModeId };
+      } else if (record.modeState.currentModeId === update.currentModeId) {
         record.modeState = { ...record.modeState, currentModeId: update.currentModeId };
         return;
+      } else {
+        record.modeState = { ...record.modeState, currentModeId: update.currentModeId };
       }
-      record.modeState = { ...record.modeState, currentModeId: update.currentModeId };
+    }
+    if (!record.active) {
+      return;
     }
     translate(update, {
       state: record.active.state,

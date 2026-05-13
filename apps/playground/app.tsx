@@ -55,6 +55,8 @@ interface IProps {
   readonly initialBudget?: number;
 }
 
+type TBusyState = "idle" | "loading" | "cancelling";
+
 const stableTracker = (budget: number | undefined): ICostTracker => {
   return createCostTracker(budget !== undefined ? { budgetUsd: budget } : {});
 };
@@ -208,7 +210,12 @@ export const App = (props: IProps) => {
   const [slashIndex, setSlashIndex] = useState<number>(0);
   const [fileIndex, setFileIndex] = useState<number>(0);
   const [dialog, setDialog] = useState<ReactNode | null>(null);
-  const [busy, setBusy] = useState<"idle" | "loading" | "cancelling">("idle");
+  const [busy, setBusyState] = useState<TBusyState>("idle");
+  const busyRef = useRef<TBusyState>("idle");
+  const setBusy = useCallback((next: TBusyState): void => {
+    busyRef.current = next;
+    setBusyState(next);
+  }, []);
   const [exitMessage, setExitMessage] = useState<IExitMessage>({ show: false });
   const [unknownCommand, setUnknownCommand] = useState<string | null>(null);
   // Counter threaded to <Mascot> via Footer. Increments on every user
@@ -624,7 +631,7 @@ export const App = (props: IProps) => {
         setBusy("idle");
       }
     },
-    [costTracker, emit, recordCost],
+    [costTracker, emit, recordCost, setBusy],
   );
 
   const onSubmit = useCallback(
@@ -654,7 +661,7 @@ export const App = (props: IProps) => {
         return;
       }
 
-      if (busy === "loading") {
+      if (busyRef.current !== "idle") {
         return;
       }
       setInputValue("");
@@ -662,7 +669,7 @@ export const App = (props: IProps) => {
       setUnknownCommand(null);
       await runPrompt(value);
     },
-    [busy, emit, runPrompt],
+    [emit, runPrompt],
   );
 
   const onCancel = useCallback((): void => {
@@ -670,7 +677,8 @@ export const App = (props: IProps) => {
       closeDialog();
       return;
     }
-    if (busy === "loading" && abortRef.current) {
+    const currentBusy = busyRef.current;
+    if (currentBusy === "loading" && abortRef.current) {
       setBusy("cancelling");
       abortRef.current.abort();
       // Visible acknowledgement that the interrupt was received. ACP
@@ -680,7 +688,7 @@ export const App = (props: IProps) => {
       emit({ kind: "info", text: "interrupting… (Esc again to force)" });
       return;
     }
-    if (busy === "cancelling") {
+    if (currentBusy === "cancelling") {
       // Force path: cancellation is hung (agent didn't ack acp.cancel,
       // or the for-await-of in runPrompt is waiting on a queue that
       // will never end). Reset playground state so the user can keep
@@ -690,7 +698,7 @@ export const App = (props: IProps) => {
       setBusy("idle");
       emit({ kind: "error", message: "force-cancelled (agent may still be running)" });
     }
-  }, [busy, closeDialog, dialog, emit]);
+  }, [closeDialog, dialog, emit, setBusy]);
 
   // While a dialog (picker / help / etc.) is mounted, PromptBox is
   // unmounted so its raw-stdin parser is gone. Pickers use Ink's
@@ -887,6 +895,9 @@ export const App = (props: IProps) => {
             onAtComplete={onAtComplete}
             onAtSubmit={onAtSubmit}
             transformPaste={transformPaste}
+            onPasteError={(cause) => {
+              emit({ kind: "error", message: cause instanceof Error ? cause.message : String(cause) });
+            }}
             placeholder="█"
           />
         </Box>

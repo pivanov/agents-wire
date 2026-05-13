@@ -5,8 +5,10 @@ import * as path from "node:path";
 import { agents } from "@/api/agents";
 import { definitionFor, listDefinitions } from "@/catalog/index";
 import { PACKAGE_VERSION } from "@/constants";
-import { isKnownError } from "@/errors";
+import { isKnownError, JsonValidationError } from "@/errors";
 import { stripTerminalEscapes } from "@/internal/strip-terminal-escapes";
+import { stripFences } from "@/schema/parse";
+import { DEFAULT_JSON_SYSTEM_PROMPT } from "@/schema/prompts";
 import type { TAgentId } from "@/types/agent";
 import type { IAskOptions } from "@/types/options";
 
@@ -157,6 +159,26 @@ const resolveSchema = async (flags: IParsedArgs["flags"]): Promise<string> => {
   throw new Error("No schema provided. Pass --schema or --schema-file.");
 };
 
+const normalizeJsonSchema = (schema: string): string => {
+  try {
+    return JSON.stringify(JSON.parse(schema), null, 2);
+  } catch (cause) {
+    throw new Error(`Invalid JSON schema: ${(cause as Error).message}`, { cause });
+  }
+};
+
+const parseCliJson = (text: string): unknown => {
+  const cleaned = stripFences(text);
+  if (cleaned.length === 0) {
+    throw new JsonValidationError("Empty response from agent", text, [{ message: "no JSON content" }]);
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (cause) {
+    throw new JsonValidationError(`Failed to parse JSON: ${(cause as Error).message}`, text, [{ message: (cause as Error).message }], { cause });
+  }
+};
+
 const buildOptionsFromFlags = (flags: IParsedArgs["flags"]): IAskOptions => {
   const options: { -readonly [K in keyof IAskOptions]: IAskOptions[K] } = {};
   if (typeof flags["--cwd"] === "string") {
@@ -216,10 +238,18 @@ const runAsk = async (parsed: IParsedArgs): Promise<void> => {
 const runAskJson = async (parsed: IParsedArgs): Promise<void> => {
   const agent = ensureKnownAgent(parsed.positional[0]);
   const prompt = await resolvePrompt(parsed.flags);
-  const schema = await resolveSchema(parsed.flags);
+  const schema = normalizeJsonSchema(await resolveSchema(parsed.flags));
   const options = buildOptionsFromFlags(parsed.flags);
-  const result = await agents.askJson(agent, prompt, schema, options);
-  process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
+  // The SDK's typed `askJson` intentionally refuses string JSON Schema because
+  // it cannot validate without a JSON Schema engine. The CLI accepts JSON
+  // Schema as prompt guidance and then parses the agent response as JSON.
+  const guidanceBase = options.systemPrompt ? `${options.systemPrompt}\n\n${DEFAULT_JSON_SYSTEM_PROMPT}` : DEFAULT_JSON_SYSTEM_PROMPT;
+  const result = await agents.ask(agent, prompt, {
+    ...options,
+    systemPrompt: `${guidanceBase}\n\nJSON Schema:\n${schema}`,
+  });
+  const data = parseCliJson(result.text);
+  process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 };
 
 const runStream = async (parsed: IParsedArgs): Promise<void> => {

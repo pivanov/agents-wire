@@ -90,15 +90,24 @@ const runOneShot = async (agent: TAgentId, prompt: string, options: IAskOptions)
     ...(options.meta ? { meta: options.meta } : {}),
   });
   stream.completion.catch(() => {});
-  for await (const event of stream) {
-    if (event.type === "usage") {
-      // cost.record() throws BudgetExceededError when budgetUsd is set.
-      cost.record(event.usage, agent, options.model);
+  try {
+    for await (const event of stream) {
+      if (event.type === "usage") {
+        // cost.record() throws BudgetExceededError when budgetUsd is set.
+        cost.record(event.usage, agent, options.model);
+      }
     }
+    const result = await stream.completion;
+    // Tracker's onUpdate already fired options.onCostUpdate per usage event.
+    return { result: { ...result, cost: cost.snapshot }, cost };
+  } catch (err) {
+    try {
+      await stream.cancel();
+    } catch {
+      /* swallow cancel-on-error */
+    }
+    throw err;
   }
-  const result = await stream.completion;
-  // Tracker's onUpdate already fired options.onCostUpdate per usage event.
-  return { result: { ...result, cost: cost.snapshot }, cost };
 };
 
 export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgentClient => {
@@ -157,12 +166,14 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
         const sessionId = await host.newSession({
           ...(merged.cwd ? { cwd: merged.cwd } : {}),
           ...(merged.mcpServers ? { mcpServers: merged.mcpServers } : {}),
+          ...(merged.meta ? { meta: merged.meta } : {}),
         });
         const raw = host.prompt(sessionId, {
           prompt,
           ...(merged.systemPrompt ? { systemPrompt: merged.systemPrompt } : {}),
           ...(merged.command ? { command: merged.command } : {}),
           ...(merged.signal ? { signal: merged.signal } : {}),
+          ...(merged.meta ? { meta: merged.meta } : {}),
         });
         upstreamCancel = raw.cancel;
         if (cancelRequested) {
@@ -179,6 +190,11 @@ export const createClient = (agent: TAgentId, defaults: IAskOptions = {}): IAgen
         return { ...result, cost: cost.snapshot };
       } catch (cause) {
         eventQueue.fail(cause);
+        try {
+          await upstreamCancel();
+        } catch {
+          /* swallow cancel-on-error */
+        }
         throw cause;
       } finally {
         await host.close();

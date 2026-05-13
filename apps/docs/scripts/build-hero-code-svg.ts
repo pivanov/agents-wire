@@ -148,10 +148,24 @@ const parseVariants = (): readonly (readonly string[])[] => {
     .filter((lines) => lines.some((l) => l.trim().length > 0));
 };
 
-const shuffleIndices = (n: number): number[] => {
-  const idx = Array.from({ length: n }, (_, i) => i);
+const hashString = (value: string): number => {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+const shuffleIndices = (variants: readonly (readonly string[])[]): number[] => {
+  const idx = Array.from({ length: variants.length }, (_, i) => i);
+  let seed = hashString(variants.map((lines) => lines.join("\n")).join("\n\n"));
+  const nextRandom = (): number => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
   for (let i = idx.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(nextRandom() * (i + 1));
     const tmp = idx[i];
     idx[i] = idx[j]!;
     idx[j] = tmp!;
@@ -476,7 +490,7 @@ const buildMascotGroup = (variants: readonly (readonly string[])[]): string => {
   }
   const slotRows = Math.max(1, maxLinesAcrossVariants(variants));
   const foPixelWidth = VIEW_WIDTH - FO_RIGHT_MARGIN - FO_X;
-  const order = shuffleIndices(variants.length).map((i) => variants[i] ?? []);
+  const order = shuffleIndices(variants).map((i) => variants[i] ?? []);
   const numSteps = Math.max(1, order.length);
   const inner = order
     .map((lines, j) =>

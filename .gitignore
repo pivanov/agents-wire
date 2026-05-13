@@ -11,8 +11,20 @@ apps/docs/reference/
 apps/docs/.vitepress/cache/
 apps/docs/.vitepress/dist/
 
-/CLAUDE.md
+.aider*
 .claude/
+.codex/
+.continue/
+.continuerules
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
+.windsurf/
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+CODEX.md
+GEMINI.md
 
 # README is copied from the monorepo root by `prepublishOnly`.
 packages/agents-wire/README.md

@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { useEffect, useState } from "react";
 
@@ -38,7 +38,7 @@ const readGitignoreSegments = async (cwd: string): Promise<Set<string>> => {
   }
 };
 
-const walk = async (root: string, dir: string, depth: number, exclude: Set<string>, out: string[]): Promise<void> => {
+const walk = async (root: string, dir: string, depth: number, exclude: Set<string>, visited: Set<string>, out: string[]): Promise<void> => {
   if (depth > MAX_DEPTH) {
     return;
   }
@@ -51,9 +51,7 @@ const walk = async (root: string, dir: string, depth: number, exclude: Set<strin
   for (const entry of entries) {
     const name = entry.name;
     if (name.startsWith(".") && name !== ".gitignore" && name !== ".env.example") {
-      if (exclude.has(name)) {
-        continue;
-      }
+      continue;
     }
     if (exclude.has(name)) {
       continue;
@@ -71,7 +69,17 @@ const walk = async (root: string, dir: string, depth: number, exclude: Set<strin
     const rel = relative(root, full).split(sep).join("/");
     out.push(isDir ? `${rel}/` : rel);
     if (isDir) {
-      await walk(root, full, depth + 1, exclude, out);
+      let real = full;
+      try {
+        real = await realpath(full);
+      } catch {
+        /* fall back to the path we already statted */
+      }
+      if (visited.has(real)) {
+        continue;
+      }
+      visited.add(real);
+      await walk(root, full, depth + 1, exclude, visited, out);
     }
   }
 };
@@ -87,7 +95,13 @@ const loadPaths = async (cwd: string): Promise<string[]> => {
     const gitignored = await readGitignoreSegments(cwd);
     const exclude = new Set<string>([...ALWAYS_EXCLUDE, ...gitignored]);
     const collected: string[] = [];
-    await walk(cwd, cwd, 0, exclude, collected);
+    const visited = new Set<string>();
+    try {
+      visited.add(await realpath(cwd));
+    } catch {
+      visited.add(cwd);
+    }
+    await walk(cwd, cwd, 0, exclude, visited, collected);
     cache = { cwd, paths: collected };
     return collected;
   })();

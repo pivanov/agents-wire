@@ -1,5 +1,5 @@
 import { useStdout } from "ink";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 // One stdout has one resize event. Each `useColumns()` / `useRows()`
 // caller used to register its own listener on that stream, so any
@@ -71,27 +71,29 @@ const useDimension = (
   fallback: number,
 ): number => {
   const { stdout } = useStdout();
-  ensureHooked(store, stdout, read);
   const [value, setValue] = useState<number>(stdout ? read(stdout) : fallback);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!stdout) {
+      setValue(fallback);
+      return;
+    }
+    ensureHooked(store, stdout, read);
     store.subscribers.add(setValue);
     // Late-mount sync: subscribers added after a resize event missed
     // the broadcast, so resync from the cached current value.
-    if (value !== store.current) {
-      setValue(store.current);
-    }
+    setValue((prev) => (prev === store.current ? prev : store.current));
     return (): void => {
       store.subscribers.delete(setValue);
     };
-    // Subscribe-once on mount; we don't want to re-subscribe on every
-    // value change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fallback, read, store, stdout]);
   return value;
 };
 
+const readColumns = (s: NodeJS.WriteStream): number => s.columns ?? 80;
+const readRows = (s: NodeJS.WriteStream): number => s.rows ?? 24;
+
 export const useColumns = (): number =>
-  useDimension(colsStore, (s) => s.columns ?? 80, 80);
+  useDimension(colsStore, readColumns, 80);
 
 export const useRows = (): number =>
-  useDimension(rowsStore, (s) => s.rows ?? 24, 24);
+  useDimension(rowsStore, readRows, 24);

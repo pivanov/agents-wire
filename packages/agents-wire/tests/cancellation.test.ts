@@ -4,6 +4,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { createSession, type ISessionOptionsInternal } from "@/api/session";
+import { BudgetExceededError } from "@/errors";
 import { connectMockHost } from "@/testing/mock-host";
 
 /** Wait for an AbortSignal to fire, rejecting on abort. */
@@ -147,5 +149,29 @@ describe("cancellation", () => {
 
     // The agent-side prompt handler should not have been called
     expect(promptCalled).toBe(false);
+  });
+
+  test("session.ask cancels upstream when budget is exceeded mid-stream", async () => {
+    let aborted = false;
+    await using ctx = await connectMockHost({
+      onPrompt: async function* (_sessionId, _blocks, signal) {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+        });
+        yield { type: "usage", usage: { contextSize: 100, contextUsed: 1, costUsd: 1 } };
+        await waitForSignal(signal ?? new AbortController().signal).catch(() => {});
+      },
+    });
+    const session = await createSession(
+      "mock" as never,
+      {
+        maxCostUsd: 0.01,
+        _hostFactory: async () => ctx.host,
+      } as ISessionOptionsInternal,
+    );
+
+    await expect(session.ask("test")).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(aborted).toBe(true);
+    await session.close();
   });
 });

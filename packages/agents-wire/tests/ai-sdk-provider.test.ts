@@ -295,4 +295,40 @@ describe("doStream - integration via _bootstrap", () => {
     expect(warningFeatures).toContain("temperature");
     expect(warningFeatures).toContain("topP");
   });
+
+  test("consumer stream cancellation cancels the upstream agent prompt", async () => {
+    let upstreamAborted = false;
+    const model = await buildScriptedModel({
+      onPrompt: async function* (_sessionId, _blocks, signal) {
+        yield { type: "text-delta", text: "partial", messageId: undefined };
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            upstreamAborted = true;
+            resolve();
+            return;
+          }
+          signal?.addEventListener(
+            "abort",
+            () => {
+              upstreamAborted = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    const result = await model.doStream({
+      prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    });
+    const reader = result.stream.getReader();
+    await reader.read(); // stream-start
+    await reader.read(); // response-metadata
+    await reader.read(); // text-start
+    await reader.read(); // text-delta
+
+    await reader.cancel("consumer stopped reading");
+
+    expect(upstreamAborted).toBe(true);
+  });
 });

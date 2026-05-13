@@ -28,6 +28,14 @@ const optionsForAgent = (base: IAskOptions, perAgent: IRaceOptions["perAgent"], 
   return { ...base, ...overrides };
 };
 
+const raceAbortError = (signal: AbortSignal): Error => {
+  const reason = signal.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  return new WireError("cancelled", typeof reason === "string" && reason.length > 0 ? reason : "race aborted");
+};
+
 export const race = async (prompt: string, candidates: readonly TAgentId[], options: IRaceOptions = {}): Promise<IRaceResult> => {
   if (candidates.length === 0) {
     throw new WireError("retry-exhausted", "race called with no candidates");
@@ -48,6 +56,9 @@ export const race = async (prompt: string, candidates: readonly TAgentId[], opti
       externalSignal.addEventListener("abort", propagate, { once: true });
       removeExternalListener = () => externalSignal.removeEventListener("abort", propagate);
     }
+    if (externalSignal.aborted) {
+      throw raceAbortError(externalSignal);
+    }
   }
 
   const startedAt = Date.now();
@@ -66,6 +77,9 @@ export const race = async (prompt: string, candidates: readonly TAgentId[], opti
   try {
     while (racers.length > 0 && !winner) {
       const settled = await Promise.race(racers.map((p) => p.then((value) => ({ value, p }))));
+      if (externalSignal?.aborted) {
+        throw raceAbortError(externalSignal);
+      }
       const remainingIndex = racers.indexOf(settled.p);
       if (remainingIndex >= 0) {
         racers.splice(remainingIndex, 1);
@@ -82,6 +96,9 @@ export const race = async (prompt: string, candidates: readonly TAgentId[], opti
     }
 
     if (!winner) {
+      if (externalSignal?.aborted) {
+        throw raceAbortError(externalSignal);
+      }
       throw new WireError("retry-exhausted", `All ${candidates.length} candidates lost the race`, {
         cause: losers[losers.length - 1]?.error,
       });
