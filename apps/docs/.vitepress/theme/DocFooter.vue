@@ -75,9 +75,26 @@
           <a href="https://github.com/pivanov" target="_blank" rel="noreferrer">@pivanov</a>
         </span>
       </div>
-      <div class="aw-foot-supported">
-        Supported by
-        <a href="https://logicstar.ai/" target="_blank" rel="noreferrer">LogicStar AI</a>
+      <div class="aw-foot-credits">
+        <a
+          class="aw-foot-build"
+          href="https://zuke.build"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Built with Zuke — visit zuke.build"
+        >
+          <span class="aw-foot-build-check" aria-hidden="true">✓</span>
+          <span class="aw-foot-build-command">./zuke ci</span>
+          <span class="aw-foot-build-dot" aria-hidden="true">·</span>
+          <span class="aw-foot-build-label">Built with Zuke</span>
+          <span class="aw-foot-build-arrow" aria-hidden="true">↗</span>
+        </a>
+        <div class="aw-foot-supported">
+          Supported by
+          <a href="https://logicstar.ai/" target="_blank" rel="noreferrer">LogicStar AI</a>
+          and
+          <a href="https://www.sashido.io/" target="_blank" rel="noreferrer">SashiDo.io</a>
+        </div>
       </div>
     </div>
   </footer>
@@ -226,6 +243,65 @@ const year = new Date().getFullYear();
   gap: 8px;
 }
 
+.aw-foot-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.aw-foot-build {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+  font-family: var(--vp-font-family-mono);
+  font-size: 11px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.aw-foot-build:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-text-1);
+}
+
+.aw-foot-build:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.aw-foot-build-check {
+  color: var(--vp-c-green-1, #10b981);
+  font-weight: 700;
+}
+
+.aw-foot-build-command {
+  color: var(--vp-c-text-1);
+}
+
+.aw-foot-build-dot {
+  color: var(--vp-c-text-3);
+}
+
+.aw-foot-build-arrow {
+  color: var(--vp-c-brand-1);
+}
+
+.aw-foot-supported {
+  text-align: right;
+}
+
 .aw-foot-dot {
   color: var(--vp-c-text-3);
   opacity: 0.6;
@@ -240,5 +316,19 @@ const year = new Date().getFullYear();
 .aw-foot-meta a:hover,
 .aw-foot-supported a:hover {
   color: var(--vp-c-brand-1);
+}
+
+@media (max-width: 640px) {
+  .aw-foot-base {
+    flex-direction: column;
+  }
+
+  .aw-foot-credits {
+    align-items: flex-start;
+  }
+
+  .aw-foot-supported {
+    text-align: left;
+  }
 }
 </style>
