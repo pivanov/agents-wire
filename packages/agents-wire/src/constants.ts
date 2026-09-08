@@ -9,8 +9,6 @@ export const ACP_PROTOCOL_VERSION = 1;
 
 export const DEFAULT_INACTIVITY_TIMEOUT_MS = 180_000;
 export const DEFAULT_INITIALIZE_TIMEOUT_MS = 30_000;
-export const DEFAULT_DISPOSE_GRACE_MS = 250;
-export const DEFAULT_STDERR_TAIL_LIMIT = 64;
 // Backstop deadline for cancelStream when inactivityTimeoutMs <= 0.
 // A non-compliant agent that acks cancel but never finishes the stream
 // triggers a forceFail after this window so the consumer can't hang.

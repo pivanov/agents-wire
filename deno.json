@@ -1,0 +1,20 @@
+{
+  "tasks": {
+    "zuke": "deno run -A zuke.ts"
+  },
+  "imports": {
+    "@zuke/core": "jsr:@zuke/core@^1",
+    "@zuke/biome": "jsr:@zuke/biome@^1",
+    "@zuke/bun": "jsr:@zuke/bun@^1",
+    "@zuke/knip": "jsr:@zuke/knip@^1",
+    "@zuke/tsc": "jsr:@zuke/tsc@^1",
+    "@zuke/tsup": "jsr:@zuke/tsup@^1"
+  },
+  "fmt": {
+    "include": ["zuke.ts"],
+    "lineWidth": 120
+  },
+  "lint": {
+    "include": ["zuke.ts"]
+  }
+}

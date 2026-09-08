@@ -1,0 +1,134 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@zuke/biome@1": "1.1.0",
+    "jsr:@zuke/bun@1": "1.2.0",
+    "jsr:@zuke/core@1": "1.46.0",
+    "jsr:@zuke/core@^1.25.0": "1.46.0",
+    "jsr:@zuke/core@^1.44.0": "1.46.0",
+    "jsr:@zuke/core@^1.45.0": "1.46.0",
+    "jsr:@zuke/knip@1": "1.1.0",
+    "jsr:@zuke/tsc@1": "1.1.0",
+    "jsr:@zuke/tsup@1": "1.0.1"
+  },
+  "jsr": {
+    "@zuke/biome@1.1.0": {
+      "integrity": "c1eec0ee614e309321355dd713b87f157d0662404256887c386b800eeb80f9c0",
+      "dependencies": [
+        "jsr:@zuke/core@^1.44.0"
+      ]
+    },
+    "@zuke/bun@1.2.0": {
+      "integrity": "b4eda8836542242cdbc3c6e0745a9f93715f6bf457fbf73d8de2e16492cc5a54",
+      "dependencies": [
+        "jsr:@zuke/core@^1.45.0"
+      ]
+    },
+    "@zuke/core@1.46.0": {
+      "integrity": "35b05626a47cc5bc2ef7457ed443e940e72372305555fa64c7c376a897917bdf"
+    },
+    "@zuke/knip@1.1.0": {
+      "integrity": "6baf05294afb8ceece4b0bfe45e44c6790c19b1e615111f5dd4ee622bc96a94f",
+      "dependencies": [
+        "jsr:@zuke/core@^1.44.0"
+      ]
+    },
+    "@zuke/tsc@1.1.0": {
+      "integrity": "69f117fd566a191cf97f53c88faee8c80a211a91a5a9d2f34e4cff2e8cd9a3b0",
+      "dependencies": [
+        "jsr:@zuke/core@^1.44.0"
+      ]
+    },
+    "@zuke/tsup@1.0.1": {
+      "integrity": "7c8dfa5921a1e5b2546e341cd8ddeb75531b5a3250a921aa70edb0cab09a5a47",
+      "dependencies": [
+        "jsr:@zuke/core@^1.25.0"
+      ]
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@zuke/biome@1",
+      "jsr:@zuke/bun@1",
+      "jsr:@zuke/core@1",
+      "jsr:@zuke/knip@1",
+      "jsr:@zuke/tsc@1",
+      "jsr:@zuke/tsup@1"
+    ],
+    "packageJson": {
+      "dependencies": [
+        "npm:@biomejs/biome@^2.4.14",
+        "npm:@changesets/changelog-github@0.6",
+        "npm:@changesets/cli@^2.31.0",
+        "npm:@pivanov/claude-wire@0.2",
+        "npm:@types/node@^22.10.5"
+      ]
+    },
+    "members": {
+      "apps/docs": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@resvg/resvg-js@^2.6.2",
+            "npm:sharp@~0.34.5",
+            "npm:vitepress@1.5"
+          ]
+        }
+      },
+      "apps/examples/code-review-bot": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/bun@^1.3.13",
+            "npm:typescript@^6.0.3",
+            "npm:zod@^4.4.3"
+          ]
+        }
+      },
+      "apps/examples/multi-agent-classifier": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/bun@^1.3.13",
+            "npm:typescript@^6.0.3",
+            "npm:zod@^4.4.3"
+          ]
+        }
+      },
+      "apps/examples/research-agent": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/bun@^1.3.13",
+            "npm:typescript@^6.0.3"
+          ]
+        }
+      },
+      "apps/playground": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/bun@^1.3.13",
+            "npm:@types/react@^19.2.14",
+            "npm:ink@^7.0.1",
+            "npm:react@^19.2.5",
+            "npm:shiki@^4.0.2",
+            "npm:typescript@^6.0.3"
+          ]
+        }
+      },
+      "packages/agents-wire": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@agentclientprotocol/claude-agent-acp@0.32",
+            "npm:@agentclientprotocol/sdk@0.21",
+            "npm:@ai-sdk/provider@^3.0.10",
+            "npm:@pivanov/claude-wire@0.2",
+            "npm:@types/bun@^1.3.13",
+            "npm:@types/node@^22.10.5",
+            "npm:@zed-industries/codex-acp@0.13",
+            "npm:knip@^6.11.0",
+            "npm:tsup@^8.5.1",
+            "npm:typescript@^6.0.3",
+            "npm:zod@^4.4.3"
+          ]
+        }
+      }
+    }
+  }
+}

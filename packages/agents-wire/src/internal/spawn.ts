@@ -1,9 +1,11 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { type Stream as AcpStream, ndJsonStream } from "@agentclientprotocol/sdk";
-import { DEFAULT_DISPOSE_GRACE_MS, DEFAULT_STDERR_TAIL_LIMIT } from "@/constants";
 import { AgentConnectionClosedError } from "@/errors";
 import type { IAgentDefinition, IWireLaunchSpec } from "@/types/agent";
+
+const DEFAULT_DISPOSE_GRACE_MS = 250;
+const DEFAULT_STDERR_TAIL_LIMIT = 64;
 
 export interface ISpawnOptions {
   readonly cwd?: string;

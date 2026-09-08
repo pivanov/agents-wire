@@ -292,6 +292,15 @@ bun packages/agents-wire/tests/smoke.ts
 bun packages/agents-wire/tests/smoke-orchestrate.ts
 ```
 
+The same gate is also defined as code in [`zuke.ts`](./zuke.ts) with [Zuke](https://github.com/zuke-build/zuke), with nothing to install first: the `./zuke` launcher (`.\zuke.ps1` on Windows) bootstraps a pinned, checksum-verified Deno on first run. `.github/workflows/ci.yml` is generated from it, so CI runs exactly the targets you run locally:
+
+```bash
+./zuke              # install → lint + typecheck + knip → test → build
+./zuke test         # one target and its prerequisites
+./zuke --list       # every target, with descriptions and dependencies
+./zuke graph        # the dependency graph
+```
+
 ## Sponsors
 
 Supported by [LogicStar AI](https://logicstar.ai/).

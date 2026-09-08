@@ -284,7 +284,3 @@ export const delegateAskJson = async <T>(prompt: string, schema: TSchemaInput<T>
   }
   return askStateless(prompt, schema, options);
 };
-
-export const closeSharedDelegatePool = async (): Promise<void> => {
-  await sharedPool.close();
-};
